@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts, not here
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────── Enums ───────────────────────────────
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum UserRole {
+  ADMIN
+  CLIENT
+}
+
+// ───────────────────────────── Business data ─────────────────────────────
+
+model Client {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(255)
+  businessCategory String   @map("business_category") @db.VarChar(255)
+
+  // Used to match incoming Meta webhooks to a client, so they must be unique
+  fbPageId         String?  @unique @map("fb_page_id") @db.VarChar(255)
+  instaAccountId   String?  @unique @map("insta_account_id") @db.VarChar(255)
+
+  // Store ENCRYPTED (e.g. AES-256-GCM) from the service layer. Never save plaintext.
+  // Text because the encrypted value (iv + tag + ciphertext) can exceed 255 chars.
+  accessToken      String   @map("access_token") @db.Text
+
+  brandLogo        String?  @map("brand_logo") @db.VarChar(255)
+
+  // AI config (validate in NestJS: brandVoice max 400 chars,
+  // language one of ENGLISH | ARABIC | ENGLISH_ARABIC)
+  // { "brandVoice": "Friendly and casual", "language": "ARABIC" }
+  aiConfig         Json     @default("{\"language\": \"ARABIC\"}") @map("ai_config")
+
+  // Auto-reply configuration (validate the shape in NestJS with Zod / class-validator)
+  // Example:
+  // {
+  //   "enabled": true,
+  //   "default_reply": "Thanks for reaching out!",
+  //   "rules": [{ "keywords": ["price"], "reply": "Our prices start at..." }]
+  // }
+  dmReplyConfig      Json   @default("{}") @map("dm_reply_config")
+  commentReplyConfig Json   @default("{}") @map("comment_reply_config")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  businessInfo     BusinessInfo?
+  services         Service[]
+  offers           Offer[]
+  users            User[]
+
+  @@map("clients")
+}
+
+model BusinessInfo {
+  id             String   @id @default(uuid()) @db.Uuid
+  clientId       String   @unique @map("client_id") @db.Uuid
+
+  // Contact split into real columns (fixed shape, read constantly by the bot)
+  phone          String?  @db.VarChar(50)
+  email          String?  @db.VarChar(255)
+  whatsapp       String?  @db.VarChar(50)
+  website        String?  @db.VarChar(255)
+
+  // Free-form list, any platform (no fixed keys):
+  // [{ "platform": "instagram", "url": "https://..." }, ...]
+  socialMedia    Json     @default("[]") @map("social_media")
+
+  // {
+  //   "city": "...", "district": "...", "full_address": "...",
+  //   "links": [{ "url": "https://maps...", "description": "..." }]
+  // }
+  location       Json?
+
+  // { "startTime": "09:00", "endTime": "17:00", "days": ["sunday", "monday"] }
+  // (or an array of these if hours differ between days)
+  workHours      Json?    @map("work_hours")
+
+  // Free-form (no enums), e.g. ["cash", "card", "instapay"]
+  paymentMethods     String[] @default([]) @map("payment_methods")
+  // Free-form, e.g. ["valU", "Sympl"]
+  installmentOptions String[] @default([]) @map("installment_options")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("business_info")
+}
+
+model Service {
+  id          String    @id @default(uuid()) @db.Uuid
+  clientId    String    @map("client_id") @db.Uuid
+
+  // One offer can cover many services; a service has at most one offer.
+  // Optional: most services have no offer. Deleting an offer just un-links its services.
+  // App-level rule: offer.clientId must equal service.clientId.
+  offerId     String?   @map("offer_id") @db.Uuid
+
+  name        String    @db.VarChar(255)
+  description String?   @db.VarChar(255)
+  price       String?   @db.VarChar(255)
+
+  // Shape varies per service, e.g. [{ "name": "Large", "price": "150" }]
+  // Variant names should be unique per service (validate in NestJS).
+  variants    Json?
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  offer       Offer?    @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([offerId])
+  @@map("services")
+}
+
+model Offer {
+  id            String       @id @default(uuid()) @db.Uuid
+  clientId      String       @map("client_id") @db.Uuid
+
+  title         String       @db.VarChar(255)
+  description   String?      @db.VarChar(255)
+  discountType  DiscountType @map("discount_type")
+  discountValue Decimal      @map("discount_value") @db.Decimal(10, 2)
+  startDate     DateTime     @map("start_date") @db.Date
+  endDate       DateTime     @map("end_date") @db.Date
+
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  services      Service[]
+
+  @@index([clientId])
+  @@index([startDate, endDate])
+  @@map("offers")
+}
+
+// ───────────────────────────── Auth ─────────────────────────────
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  name                String    @db.VarChar(255)
+
+  // Lowercase + trim in the app before saving (Prisma can't enforce this).
+  email               String    @unique @db.VarChar(255)
+
+  // Prisma has no `select: false`. Hide these with Prisma's `omit` option
+  // (e.g. global omit in the PrismaClient constructor) so they never leak into responses.
+  passwordHash        String    @map("password_hash")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+  resetTokenHash      String?   @map("reset_token_hash")
+  resetTokenExpiresAt DateTime? @map("reset_token_expires_at")
+
+  roles               UserRole[] @default([CLIENT])
+
+  // Which business a CLIENT-role user belongs to (null for admins)
+  clientId            String?   @map("client_id") @db.Uuid
+
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  client              Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  refreshTokens       RefreshToken[]
+
+  @@index([clientId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+
+  // Store a HASH of the token (e.g. SHA-256), never the raw token
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
