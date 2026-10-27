@@ -57,6 +57,43 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Meta webhook
+
+The Meta webhook endpoint is:
+
+```text
+/webhooks/meta
+```
+
+Set these values in `.env.development.local` (do not commit them):
+
+```env
+META_VERIFY_TOKEN=choose-a-private-verification-token
+META_APP_SECRET=your-meta-app-secret
+```
+
+Meta uses `GET /webhooks/meta` to verify the callback. Incoming `POST`
+requests must include Meta's `X-Hub-Signature-256` header; requests with an
+invalid signature are rejected.
+
+To expose only this endpoint during local development, start the API and the
+allow-list proxy in separate terminals:
+
+```bash
+npm run start:dev
+npm run tunnel:meta
+```
+
+Then tunnel the proxy port with an HTTPS tunnel provider such as ngrok:
+
+```bash
+ngrok http 4000
+```
+
+Use the generated HTTPS URL plus `/webhooks/meta` in Meta's webhook
+configuration. The proxy rejects every path other than `/webhooks/meta` and
+only forwards `GET` and `POST` requests.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

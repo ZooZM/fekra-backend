@@ -11,6 +11,7 @@ import { ServicesModule } from './services/services.module';
 import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ServicesModule,
     PaymentMethodsModule,
     OffersModule,
+    MetaWebhookModule,
   ],
   controllers: [AppController],
   providers: [
