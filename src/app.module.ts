@@ -12,6 +12,7 @@ import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
+import { InboxModule } from './inbox/inbox.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
     PaymentMethodsModule,
     OffersModule,
     MetaWebhookModule,
+    InboxModule,
   ],
   controllers: [AppController],
   providers: [
