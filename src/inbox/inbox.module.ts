@@ -6,8 +6,14 @@ import { DmBufferService } from './dm-buffer.service';
 import { N8nDeliveryService } from './n8n-delivery.service';
 import { ExpiryService } from './expiry.service';
 import { N8nCallbackController } from './n8n-callback.controller';
+import { ClientsModule } from '@app/clients/clients.module';
+import { MessageSenderService } from './message-sender.service';
+import { GraphApiService } from './graph-api.service';
+import { CommentReplyService } from './comment-reply.service';
+import { AttachmentHandlerService } from './attachment-handler.service';
 
 @Module({
+  imports: [ClientsModule],
   controllers: [N8nCallbackController],
   providers: [
     ...redisProviders,
@@ -15,6 +21,10 @@ import { N8nCallbackController } from './n8n-callback.controller';
     DmBufferService,
     N8nDeliveryService,
     ExpiryService,
+    GraphApiService,
+    MessageSenderService,
+    CommentReplyService,
+    AttachmentHandlerService,
   ],
   exports: [PriorityInboxService],
 })

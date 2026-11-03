@@ -12,9 +12,10 @@ import {
   MetaFeedValue,
   MetaMessagingEvent,
   MetaWebhookPayload,
-} from '../types/meta-request.type';
+} from '../types/meta-webhook.types';
 import { PriorityInboxService } from '@app/inbox/priority-inbox.service';
 import { ConfigService } from '@nestjs/config';
+import { extractAttachments } from '../attachments';
 
 @Injectable()
 export class MetaWebhookService {
@@ -106,7 +107,6 @@ export class MetaWebhookService {
       `New comment ${value.comment_id} from ${value.from?.id}: ${value.message}`,
     );
 
-    // TODO: forward to n8n
     // in handleFeedEvent, after the filters
     void this.inbox.push({
       kind: 'comment',
@@ -127,10 +127,12 @@ export class MetaWebhookService {
   ): void {
     if (event.message?.is_echo) return;
     if (event.sender?.id === entry.id) return;
-    if (!event.message?.text) return;
+
+    const text = event.message?.text;
+    const attachments = extractAttachments(event.message);
+    if (!event.message || (!text && attachments.length === 0)) return; // e.g. video only
 
     this.logger.log(`New DM ${event.message.mid} from ${event.sender?.id}`);
-    // TODO: forward to n8n
 
     // in handleMessagingEvent, after the filters
     void this.inbox.push({
@@ -139,7 +141,8 @@ export class MetaWebhookService {
       id: event.message.mid,
       accountId: entry.id,
       senderId: event.sender!.id,
-      text: event.message.text,
+      text,
+      attachments,
       timestamp: event.timestamp ?? Date.now(),
     });
   }

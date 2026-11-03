@@ -9,10 +9,12 @@ import { BaseQueryDto } from '@app/common/dto/query-base.dto';
 import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { Client } from '@app/generated/prisma/client';
 import { Prisma } from '@app/generated/prisma/client';
+import { TokenCryptoService } from '@app/crypto/token-crypto.service';
 
 @Injectable()
 export class ClientsService {
   constructor(
+    private readonly cryptoService: TokenCryptoService,
     @Inject(CLIENTS_REPOSITORY) private readonly repo: IClientsRepository,
   ) {}
 
@@ -48,5 +50,33 @@ export class ClientsService {
 
   remove(id: string): Promise<void> {
     return this.repo.delete(id);
+  }
+
+  async getClientDataForWorkFlow(
+    brandId: string,
+  ): Promise<Omit<Client, 'accessToken'> | null> {
+    const client = await this.repo.getClientDataForWorkFlow(brandId);
+    if (!client) {
+      throw new NotFoundException(
+        `Client data not found for brandId: ${brandId}`,
+      );
+    }
+
+    return client;
+  }
+
+  async setAccessToken(clientId: string, token: string): Promise<void> {
+    await this.repo.setAccessToken(
+      clientId,
+      this.cryptoService.encrypt(token, clientId),
+    );
+  }
+
+  async getAccessToken(clientId: string): Promise<string | null> {
+    const token = await this.repo.getAccessToken(clientId);
+    if (!token) {
+      return null;
+    }
+    return this.cryptoService.decrypt(token, clientId);
   }
 }

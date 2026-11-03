@@ -80,7 +80,6 @@ export class UsersRepository implements IUsersRepository {
     return user;
   }
 
-  // TODO: ask calude what to do here
   async create(data: CreateUserData): Promise<SafeUser> {
     const user = await this.prisma.user.create({ data });
 

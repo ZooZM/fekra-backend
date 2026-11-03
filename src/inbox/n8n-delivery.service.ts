@@ -100,4 +100,17 @@ export class N8nDeliveryService {
     );
     await this.send(id, payload, attempts + 1);
   }
+
+  async take(id: string): Promise<{ payload: any; attempts: number } | null> {
+    const res = await this.redis
+      .multi()
+      .hget(PENDING_HASH, id)
+      .hdel(PENDING_HASH, id)
+      .del(`${REQ_TTL}${id}`)
+      .exec();
+
+    const raw = res?.[0]?.[1] as string | null;
+    if (!raw || res?.[1]?.[1] !== 1) return null; // already acked, expired, or unknown
+    return JSON.parse(raw);
+  }
 }

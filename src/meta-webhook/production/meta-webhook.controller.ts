@@ -4,27 +4,40 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   Post,
-  Query,
   Req,
+  Query,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { MetaWebhookService } from './meta-webhook.service';
-import { MetaDashboardTestService } from '../dashboard-test/meta-dashboard-test.service';
-import { MetaWebhookPayload } from '../types/meta-request.type';
-import { InstagramWebhookService } from '../instagram/instagram-webhook.service';
-import { InstagramDashboardTestService } from '../instagram/instagram-dashboard-test.service';
+import { MetaWebhookPayload } from '../types/meta-webhook.types';
+import { InstagramWebhookService } from './instagram-webhook.service';
+// import {
+//   isFacebookDashboardTest,
+//   isInstagramDashboardTest,
+// } from './dashboard-test-detector';
 
 type RawBodyRequest = Request & { rawBody?: Buffer };
 
 @Controller('webhooks/meta')
 export class MetaWebhookController {
+  private readonly logger = new Logger(MetaWebhookController.name);
+
   constructor(
     private readonly webhookService: MetaWebhookService,
-    private readonly dashboardTestService: MetaDashboardTestService,
     private readonly instagramService: InstagramWebhookService,
-    private readonly instagramDashboardTest: InstagramDashboardTestService,
   ) {}
+
+  @Get()
+  verify(
+    @Query('hub.mode') mode: string | undefined,
+    @Query('hub.verify_token') token: string | undefined,
+    @Query('hub.challenge') challenge: string | undefined,
+  ): string {
+    this.webhookService.verifyChallenge(mode, token);
+    return challenge ?? '';
+  }
 
   @Post()
   @HttpCode(200)
@@ -36,19 +49,31 @@ export class MetaWebhookController {
 
     const payload = request.body as MetaWebhookPayload;
 
-    if (payload?.object === 'instagram') {
-      if (this.instagramDashboardTest.isDashboardTest(payload)) {
-        this.instagramDashboardTest.handle(payload);
-      } else {
-        this.instagramService.handleEvent(payload);
-      }
-      return { received: true };
-    }
+    // if (payload?.object === 'instagram') {
+    //   if (isInstagramDashboardTest(payload)) {
+    //     this.logger.log('Ignoring Instagram dashboard test payload');
+    //   } else {
+    //     this.instagramService.handleEvent(payload);
+    //   }
+    //   return { received: true };
+    // }
 
-    if (this.dashboardTestService.isDashboardTest(payload)) {
-      this.dashboardTestService.handle(payload);
-    } else {
-      this.webhookService.handleEvent(payload);
+    // if (isFacebookDashboardTest(payload)) {
+    //   this.logger.log('Ignoring Facebook dashboard test payload');
+    // } else {
+    //   this.webhookService.handleEvent(payload);
+    // }
+    // return { received: true };
+
+    switch (payload?.object) {
+      case 'page':
+        this.webhookService.handleEvent(payload);
+        break;
+      case 'instagram':
+        this.instagramService.handleEvent(payload);
+        break;
+      default:
+        this.logger.debug(`Ignoring object type: ${payload?.object}`);
     }
     return { received: true };
   }

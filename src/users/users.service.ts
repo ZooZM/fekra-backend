@@ -21,7 +21,6 @@ import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 
 const normalizeEmail = (email: string) => email.toLowerCase().trim();
 
-// TODO: create the createUserDto and updateUserDto
 @Injectable()
 export class UsersService {
   constructor(

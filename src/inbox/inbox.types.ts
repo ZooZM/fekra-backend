@@ -22,5 +22,15 @@ export type InboxItem =
       postId?: string;
       raw?: unknown;
     })
-  | (Base & { kind: 'message'; senderId: string; text: string })
+  | (Base & {
+      kind: 'message';
+      senderId: string;
+      text?: string;
+      attachments?: InboxAttachment[];
+    })
   | (Base & { kind: 'batch'; senderId: string; messages: BufferedMessage[] });
+
+export interface InboxAttachment {
+  type: 'image' | 'audio';
+  url: string;
+}

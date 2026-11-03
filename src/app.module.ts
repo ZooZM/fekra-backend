@@ -8,11 +8,20 @@ import { AuthModule } from './auth/auth.module';
 import { GeneralExceptionsFilter } from './common/filters/general-exceptions.filter';
 import { ClientsModule } from './clients/clients.module';
 import { ServicesModule } from './services/services.module';
-import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
+import { BusinessInfoModule } from './business-info/business-info.module';
 import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
 import { InboxModule } from './inbox/inbox.module';
+
+function devModules() {
+  if (process.env.NODE_ENV === 'production') return [];
+  try {
+    return [require('./meta-webhook/dev/meta-dev.module').MetaDevModule];
+  } catch {
+    return []; // folder not present, nothing to load
+  }
+}
 
 @Module({
   imports: [
@@ -25,10 +34,11 @@ import { InboxModule } from './inbox/inbox.module';
     AuthModule,
     ClientsModule,
     ServicesModule,
-    PaymentMethodsModule,
+    BusinessInfoModule,
     OffersModule,
-    MetaWebhookModule,
     InboxModule,
+    MetaWebhookModule,
+    ...devModules(),
   ],
   controllers: [AppController],
   providers: [

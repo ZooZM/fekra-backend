@@ -20,17 +20,18 @@ export class DmBufferService {
    * instances adding at once can't overwrite each other like a JSON array would.
    * SET ... EX restarts the timer on every message.
    */
-  async add(item: MessageItem): Promise<void> {
+  async add(
+    item: MessageItem,
+    text: string,
+    field = item.id, // hash field, must be unique per buffered piece
+    timestamp = item.timestamp, // keeps pieces of one message in order
+  ): Promise<void> {
     const key = `${item.platform}:${item.accountId}:${item.senderId}`;
     const ttl = this.configService.get<number>('DM_WINDOW_SEC') ?? 10;
 
     await this.redis
       .multi()
-      .hset(
-        `${DM_DATA}${key}`,
-        item.id,
-        JSON.stringify({ text: item.text, timestamp: item.timestamp }),
-      )
+      .hset(`${DM_DATA}${key}`, field, JSON.stringify({ text, timestamp }))
       .set(`${DM_TTL}${key}`, '1', 'EX', ttl)
       .exec();
   }

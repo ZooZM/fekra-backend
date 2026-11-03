@@ -9,4 +9,10 @@ export interface IClientsRepository extends IBaseRepository<
   Client,
   CreateClientData,
   UpdateClientData
-> {}
+> {
+  getClientDataForWorkFlow(
+    brandId: string,
+  ): Promise<Omit<Client, 'accessToken'> | null>;
+  getAccessToken(clientId: string): Promise<string | null>;
+  setAccessToken(clientId: string, token: string): Promise<void>;
+}

@@ -52,4 +52,45 @@ export class ClientsRepository implements IClientsRepository {
     await this.prisma.client.delete({ where: { id } });
     this.logger.debug(`delete(${id})`);
   }
+
+  async getClientDataForWorkFlow(
+    brandId: string,
+  ): Promise<Omit<Client, 'accessToken'> | null> {
+    if (!brandId) {
+      this.logger.warn('getClientDataForWorkFlow called with empty brandId');
+      return null;
+    }
+
+    const query: Prisma.ClientFindFirstArgs = {
+      where: { OR: [{ fbPageId: brandId }, { instaAccountId: brandId }] },
+      omit: { accessToken: true },
+      include: {
+        services: true,
+        offers: true,
+        businessInfo: true,
+      },
+    };
+
+    const client = await this.prisma.client.findFirst(query);
+
+    this.logger.debug(
+      `getClientDataForWorkFlow(${brandId}) => ${JSON.stringify(client)}`,
+    );
+    return client;
+  }
+
+  async getAccessToken(clientId: string): Promise<string | null> {
+    const row = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { accessToken: true },
+    });
+    return row?.accessToken ?? null;
+  }
+
+  async setAccessToken(clientId: string, token: string): Promise<void> {
+    await this.prisma.client.update({
+      where: { id: clientId },
+      data: { accessToken: token },
+    });
+  }
 }
