@@ -22,10 +22,40 @@ export class CommentReplyService {
     private readonly clients: ClientsService,
   ) {}
 
+  async handleEngagement(req: SendableRequest): Promise<void> {
+    let reply;
+    try {
+      const token = await this.clients.getAccessToken(req.clientId);
+      if (!token) throw new Error('No access token stored for this client');
+      const base = this.graph.host(req.platform);
+      const engagementReplies = req.client!.commentReplyConfig.engagement;
+
+      const randomIndex = Math.floor(Math.random() * engagementReplies.length);
+
+      reply = engagementReplies[randomIndex];
+
+      await this.like(req, base, token);
+
+      if (reply) {
+        await this.publicReply(req, base, token, reply);
+      }
+    } catch (err) {
+      this.logger.error(
+        `Comment handling failed for ${req.id}: ${(err as Error).message}`,
+      );
+      await this.graph.deadLetter({
+        service: 'comment',
+        request: req,
+        input: { type: 'engagement', reply },
+        error: (err as Error).message,
+      });
+    }
+  }
+
   /** Never throws, so callers can use `void commentReply.handle(...)`. */
   async handle(req: SendableRequest, input: CommentReplyInput): Promise<void> {
     try {
-      const token = await this.clients.getAccessToken(req.client.id);
+      const token = await this.clients.getAccessToken(req.clientId);
       if (!token) throw new Error('No access token stored for this client');
       const base = this.graph.host(req.platform);
 

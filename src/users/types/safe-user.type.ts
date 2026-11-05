@@ -2,10 +2,18 @@ import { User } from '@app/generated/prisma/client';
 
 export type SafeUser = Omit<
   User,
-  'passwordHash' | 'resetTokenHash' | 'resetTokenExpiresAt'
+  | 'passwordHash'
+  | 'passwordChangedAt'
+  | 'resetTokenHash'
+  | 'resetTokenExpiresAt'
 >;
 
-export type UserWithPassword = Omit<
+export type SafeUserWithPassword = Omit<
   User,
-  'resetTokenHash' | 'resetTokenExpiresAt'
+  'passwordChangedAt' | 'resetTokenHash' | 'resetTokenExpiresAt'
+>;
+
+export type SafeUserWithPasswordChangedAt = Omit<
+  User,
+  'passwordHash' | 'resetTokenHash' | 'resetTokenExpiresAt'
 >;

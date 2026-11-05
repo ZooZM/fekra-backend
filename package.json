@@ -37,12 +37,14 @@
     "class-validator": "^0.15.1",
     "ioredis": "^6.0.0",
     "mongoose": "^9.11.2",
+    "nestjs-zod": "^5.5.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -95,7 +97,10 @@
     "moduleNameMapper": {
       "^@app/(.*)$": "<rootDir>/$1",
       "^@common/(.*)$": "<rootDir>/common/$1",
-      "^@config/(.*)$": "<rootDir>/config/$1"
+      "^@config/(.*)$": "<rootDir>/config/$1",
+      "^@nestjs/config$": "<rootDir>/test-mocks/nestjs-config.ts",
+      "^@nestjs/jwt$": "<rootDir>/test-mocks/nestjs-jwt.ts",
+      "^@nestjs/passport$": "<rootDir>/test-mocks/nestjs-passport.ts"
     }
   },
   "allowScripts": {

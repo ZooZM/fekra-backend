@@ -2,11 +2,11 @@ import { UsersService } from '@app/users/users.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { SafeUser } from '@app/users/types/safe-user.type';
-import { CreateUserDto } from './interfaces/create-user.interface';
 import * as authConstants from './consts/auth.contants';
+import { RegisterUserInput } from './schemas/auth.schema';
+import { CreateUserInput } from '@app/users/schemas/user.schema';
 
 @Injectable()
 export class AuthService {
@@ -49,10 +49,10 @@ export class AuthService {
   }
 
   async registerUser(
-    registerUserDto: RegisterDto,
+    registerUserDto: RegisterUserInput,
   ): Promise<{ user: SafeUser; token: string }> {
     const passwordHash = await authConstants.hash(registerUserDto.password);
-    const createUserDto: CreateUserDto = {
+    const createUserDto: CreateUserInput = {
       name: registerUserDto.name,
       email: registerUserDto.email,
       passwordHash,

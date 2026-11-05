@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, Service } from '@app/generated/prisma/client';
 import { PrismaService } from '@app/prisma/prisma.service';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
 import {
   paginate,
   PaginatedResult,
@@ -9,6 +8,7 @@ import {
 import { IServicesRepository } from './IServicesRepository.repository';
 import { CreateServiceData } from '../interfaces/create-service-data.interface';
 import { UpdateServiceData } from '../interfaces/update-service-data.interface';
+import { QueryServiceInput } from '../schemas/query-service.schema';
 
 const ORDER_FIELDS = ['name', 'price', 'createdAt'] as const;
 type OrderField = (typeof ORDER_FIELDS)[number];
@@ -17,7 +17,7 @@ type OrderField = (typeof ORDER_FIELDS)[number];
 export class ServicesRepository implements IServicesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query = new BaseQueryDto()): Promise<PaginatedResult<Service>> {
+  async findAll(query: QueryServiceInput): Promise<PaginatedResult<Service>> {
     const orderBy = ORDER_FIELDS.includes(query.orderBy as OrderField)
       ? (query.orderBy as OrderField)
       : 'createdAt';

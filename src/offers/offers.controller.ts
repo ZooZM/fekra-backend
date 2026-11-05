@@ -10,9 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { OffersService } from './offers.service';
-import { CreateOfferDto } from './dto/create-offer.dto';
-import { UpdateOfferDto } from './dto/update-offer.dto';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
+import {
+  CreateOfferDto,
+  UpdateOfferDto,
+} from './schemas/offer.schema';
+import { QueryOfferDto } from './schemas/query-offer.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 
 @Controller('offers')
@@ -21,12 +23,12 @@ export class OffersController {
   constructor(private readonly offersService: OffersService) {}
 
   @Post()
-  create(@Body() createOfferDto: CreateOfferDto) {
-    return this.offersService.create(createOfferDto);
+  create(@Body() dto: CreateOfferDto) {
+    return this.offersService.create(dto);
   }
 
   @Get()
-  findAll(@Query() query: BaseQueryDto) {
+  findAll(@Query() query: QueryOfferDto) {
     return this.offersService.findAll(query);
   }
 
@@ -36,8 +38,8 @@ export class OffersController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateOfferDto: UpdateOfferDto) {
-    return this.offersService.update(id, updateOfferDto);
+  update(@Param('id') id: string, @Body() dto: UpdateOfferDto) {
+    return this.offersService.update(id, dto);
   }
 
   @Delete(':id')

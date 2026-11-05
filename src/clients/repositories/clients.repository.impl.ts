@@ -9,9 +9,9 @@ import {
 import { IClientsRepository } from './IClientsRepository.repository';
 import { CreateClientData } from '../interfaces/create-client-data.interface';
 import { UpdateClientData } from '../interfaces/update-client-data.interface';
-
-const ORDER_FIELDS = ['name', 'businessCategory', 'createdAt'] as const;
-type OrderField = (typeof ORDER_FIELDS)[number];
+import { ClientRecord, ClientWorkflowData } from '../types/client.types';
+import { toClientRecord, toWorkflowData } from '../mappers/client.mapper';
+import { QueryClientInput } from '../schemas/query-client.schema';
 
 @Injectable()
 export class ClientsRepository implements IClientsRepository {
@@ -19,64 +19,51 @@ export class ClientsRepository implements IClientsRepository {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query = new BaseQueryDto()): Promise<PaginatedResult<Client>> {
-    const orderBy = ORDER_FIELDS.includes(query.orderBy as OrderField)
-      ? (query.orderBy as OrderField)
-      : 'createdAt';
-    const where: Prisma.ClientWhereInput = {};
-    const [data, total] = await this.prisma.$transaction([
+  async findAll(
+    query: QueryClientInput,
+  ): Promise<PaginatedResult<ClientRecord>> {
+    const [rows, total] = await this.prisma.$transaction([
       this.prisma.client.findMany({
-        where,
-        orderBy: { [orderBy]: query.orderDir },
+        orderBy: [{ [query.orderBy]: query.orderDir }, { id: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
-      this.prisma.client.count({ where }),
+      this.prisma.client.count(),
     ]);
-    return paginate(data, total, query.page, query.limit);
+    return paginate(rows.map(toClientRecord), total, query.page, query.limit);
   }
 
-  findById(id: string): Promise<Client | null> {
-    return this.prisma.client.findUnique({ where: { id } });
+  async findById(id: string): Promise<ClientRecord | null> {
+    const row = await this.prisma.client.findUnique({ where: { id } });
+    return row ? toClientRecord(row) : null;
   }
 
-  create(data: CreateClientData): Promise<Client> {
-    return this.prisma.client.create({ data });
+  async create(data: CreateClientData): Promise<ClientRecord> {
+    return toClientRecord(await this.prisma.client.create({ data }));
   }
 
-  update(id: string, data: UpdateClientData): Promise<Client> {
-    return this.prisma.client.update({ where: { id }, data });
-  }
-
-  async delete(id: string): Promise<void> {
-    await this.prisma.client.delete({ where: { id } });
-    this.logger.debug(`delete(${id})`);
+  async update(id: string, data: UpdateClientData): Promise<ClientRecord> {
+    return toClientRecord(
+      await this.prisma.client.update({ where: { id }, data }),
+    );
   }
 
   async getClientDataForWorkFlow(
     brandId: string,
-  ): Promise<Omit<Client, 'accessToken'> | null> {
-    if (!brandId) {
-      this.logger.warn('getClientDataForWorkFlow called with empty brandId');
-      return null;
-    }
+  ): Promise<ClientWorkflowData | null> {
+    if (!brandId) return null;
 
-    const query: Prisma.ClientFindFirstArgs = {
+    // the query is inline so Prisma infers the include type, which a separate
+    // `Prisma.ClientFindFirstArgs` variable would erase
+    const row = await this.prisma.client.findFirst({
       where: { OR: [{ fbPageId: brandId }, { instaAccountId: brandId }] },
-      omit: { accessToken: true },
-      include: {
-        services: true,
-        offers: true,
-        businessInfo: true,
-      },
-    };
-
-    const client = await this.prisma.client.findFirst(query);
+      include: { services: true, offers: true, businessInfo: true },
+    });
 
     this.logger.debug(
-      `getClientDataForWorkFlow(${brandId}) => ${JSON.stringify(client)}`,
+      `getClientDataForWorkFlow(${brandId}) → ${row ? row.id : 'not found'}`,
     );
-    return client;
+    return row ? toWorkflowData(row) : null;
   }
 
   async getAccessToken(clientId: string): Promise<string | null> {
@@ -92,5 +79,13 @@ export class ClientsRepository implements IClientsRepository {
       where: { id: clientId },
       data: { accessToken: token },
     });
+  }
+
+  async delete(id: string): Promise<void> {
+    const res = await this.prisma.client.delete({
+      where: { id },
+    });
+
+    this.logger.debug(`delete(${id}), deletedClient(${res})`);
   }
 }

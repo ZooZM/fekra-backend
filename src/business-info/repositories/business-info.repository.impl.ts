@@ -1,82 +1,74 @@
-import { Injectable } from '@nestjs/common';
+// clients/repositories/business-info.repository.ts
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@app/prisma/prisma.service';
 import { BusinessInfo, Prisma } from '@app/generated/prisma/client';
+import {
+  readLocation,
+  readSocialMedia,
+  readWorkHours,
+} from '@common/zod/json-readers';
 import { IBusinessInfoRepository } from './IBusinessInfoRepository.repository';
-import { CreateBusinessInfoDto } from '../dto/create-business-info.dto';
-import { UpdateBusinessInfoDto } from '../dto/update-business-info.dto';
+import {
+  BusinessInfoRecord,
+  CreateBusinessInfoData,
+  UpdateBusinessInfoData,
+} from '../interfaces/business-info.interface';
+
+// undefined = leave unchanged, null = clear the column
+const jsonOrNull = <T>(v: T | null | undefined) =>
+  v === undefined ? undefined : (v ?? Prisma.JsonNull);
 
 @Injectable()
 export class BusinessInfoRepository implements IBusinessInfoRepository {
+  private readonly logger = new Logger(BusinessInfoRepository.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(): Promise<BusinessInfo[]> {
-    return this.prisma.businessInfo.findMany();
+  async findByClientId(clientId: string): Promise<BusinessInfoRecord | null> {
+    const row = await this.prisma.businessInfo.findUnique({
+      where: { clientId },
+    });
+    return row ? this.toRecord(row) : null;
   }
 
-  findByClientId(clientId: string): Promise<BusinessInfo | null> {
-    return this.prisma.businessInfo.findUnique({ where: { clientId } });
-  }
-
-  create(data: CreateBusinessInfoDto): Promise<BusinessInfo> {
-    return this.prisma.businessInfo.upsert({
-      where: { clientId: data.clientId },
-      create: {
-        clientId: data.clientId,
-        phone: data.phone,
-        email: data.email,
-        whatsapp: data.whatsapp,
-        website: data.website,
-        socialMedia: data.socialMedia as Prisma.InputJsonValue | undefined,
-        location: data.location as Prisma.InputJsonValue | undefined,
-        workHours: data.workHours as Prisma.InputJsonValue | undefined,
-        paymentMethods: data.paymentMethods,
-        installmentOptions: data.installmentOptions,
-      },
-      update: {
-        phone: data.phone,
-        email: data.email,
-        whatsapp: data.whatsapp,
-        website: data.website,
-        socialMedia: data.socialMedia as Prisma.InputJsonValue | undefined,
-        location: data.location as Prisma.InputJsonValue | undefined,
-        workHours: data.workHours as Prisma.InputJsonValue | undefined,
-        paymentMethods: data.paymentMethods,
-        installmentOptions: data.installmentOptions,
+  async create(data: CreateBusinessInfoData): Promise<BusinessInfoRecord> {
+    const row = await this.prisma.businessInfo.create({
+      data: {
+        ...data,
+        location: jsonOrNull(data.location),
+        workHours: jsonOrNull(data.workHours),
       },
     });
+    this.logger.debug(`create → business info for client ${data.clientId}`);
+    return this.toRecord(row);
   }
 
-  update(
+  async update(
     clientId: string,
-    data: UpdateBusinessInfoDto,
-  ): Promise<BusinessInfo> {
-    return this.prisma.businessInfo.update({
+    data: UpdateBusinessInfoData,
+  ): Promise<BusinessInfoRecord> {
+    const row = await this.prisma.businessInfo.update({
       where: { clientId },
       data: {
-        ...(data.phone !== undefined && { phone: data.phone }),
-        ...(data.email !== undefined && { email: data.email }),
-        ...(data.whatsapp !== undefined && { whatsapp: data.whatsapp }),
-        ...(data.website !== undefined && { website: data.website }),
-        ...(data.socialMedia !== undefined && {
-          socialMedia: data.socialMedia as Prisma.InputJsonValue,
-        }),
-        ...(data.location !== undefined && {
-          location: data.location as Prisma.InputJsonValue,
-        }),
-        ...(data.workHours !== undefined && {
-          workHours: data.workHours as Prisma.InputJsonValue,
-        }),
-        ...(data.paymentMethods !== undefined && {
-          paymentMethods: data.paymentMethods,
-        }),
-        ...(data.installmentOptions !== undefined && {
-          installmentOptions: data.installmentOptions,
-        }),
+        ...data,
+        location: jsonOrNull(data.location),
+        workHours: jsonOrNull(data.workHours),
       },
     });
+    return this.toRecord(row);
   }
 
   async delete(clientId: string): Promise<void> {
     await this.prisma.businessInfo.delete({ where: { clientId } });
+  }
+
+  /** The single place where raw JSON columns become typed values. */
+  private toRecord(row: BusinessInfo): BusinessInfoRecord {
+    return {
+      ...row,
+      socialMedia: readSocialMedia(row.socialMedia),
+      location: readLocation(row.location),
+      workHours: readWorkHours(row.workHours),
+    };
   }
 }

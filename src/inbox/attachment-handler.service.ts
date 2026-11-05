@@ -89,16 +89,14 @@ LIKELY_INTENT: ...
     if (business == null) {
       return null;
     }
-    const aiConfig = business?.aiConfig as unknown as Object;
-    const services = Array.isArray(business?.['services'])
-      ? business['services']
-      : [];
+    const aiConfig = business.aiConfig;
+    const services = business.services;
 
     const language =
-      aiConfig['language'] === 'en'
+      aiConfig.language === 'ENGLISH'
         ? 'English'
-        : aiConfig['language'] && aiConfig['language'] !== 'ar'
-          ? `the language with code "${aiConfig['language']}"`
+        : aiConfig.language && aiConfig.language !== 'ARABIC'
+          ? `the language with code "${aiConfig.language}"`
           : 'Egyptian colloquial Arabic';
 
     let prompt = this.IMAGE_SYSTEM_PROMPT.replace(
@@ -208,16 +206,16 @@ LIKELY_INTENT: ...
     if (business == null) {
       return null;
     }
-    const aiConfig = business?.aiConfig as unknown as Object;
+    const aiConfig = business.aiConfig;
     const services = Array.isArray(business?.['services'])
       ? business['services']
       : [];
 
     const language =
-      aiConfig['language'] === 'en'
+      aiConfig.language === 'ENGLISH'
         ? 'English'
-        : aiConfig['language'] && aiConfig['language'] !== 'ar'
-          ? `the language with code "${aiConfig['language']}"`
+        : aiConfig.language && aiConfig.language !== 'ARABIC'
+          ? `the language with code "${aiConfig.language}"`
           : 'Egyptian colloquial Arabic';
 
     let prompt = this.VOICE_SYSTEM_PROMPT.replace('{{LANGUAGE}}', language);

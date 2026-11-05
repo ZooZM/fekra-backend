@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IUsersRepository } from './IUsersRepository.repository';
-import { QueryUserDto } from '../dto/query-user.dto';
 import { UpdateUserData } from '../interfaces/update-user-data.interface';
 import { paginate, PaginatedResult } from '@common/helpers/pagination.helper';
 import { CreateUserData } from '../interfaces/create-user-data.interface';
 import { PrismaService } from '@app/prisma/prisma.service';
-import { Prisma, User, UserRole } from '@app/generated/prisma/client';
-import { SafeUser } from '../types/safe-user.type';
-
-const ALLOWED_ORDER_FIELDS = ['name', 'email', 'createdAt'] as const;
-
-type OrderField = (typeof ALLOWED_ORDER_FIELDS)[number];
+import { Prisma, UserRole } from '@app/generated/prisma/client';
+import {
+  SafeUser,
+  SafeUserWithPassword,
+  SafeUserWithPasswordChangedAt,
+} from '../types/safe-user.type';
+import { QueryUserDto } from '../schemas/user.schema';
 
 @Injectable()
 export class UsersRepository implements IUsersRepository {
@@ -18,28 +18,28 @@ export class UsersRepository implements IUsersRepository {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(
-    query = new QueryUserDto(),
-  ): Promise<PaginatedResult<SafeUser>> {
+  async findByIdWithPassowrdChangedAt(
+    id: string,
+  ): Promise<SafeUserWithPasswordChangedAt | null> {
+    return await this.prisma.user.findUnique({
+      where: { id },
+      omit: { passwordChangedAt: false },
+    });
+  }
+
+  async findAll(query: QueryUserDto): Promise<PaginatedResult<SafeUser>> {
     const where: Prisma.UserWhereInput = {
-      ...(query.email && { email: query.email.toLowerCase() }),
+      ...(query.email && { email: query.email }),
       ...(query.name && { name: query.name }),
     };
 
-    const orderBy: OrderField = ALLOWED_ORDER_FIELDS.includes(
-      query.orderBy as OrderField,
-    )
-      ? (query.orderBy as OrderField)
-      : 'createdAt';
-    const direction: Prisma.SortOrder =
-      query.orderDir === 'asc' ? 'asc' : 'desc';
     const skip = (query.page - 1) * query.limit;
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         orderBy: [
-          { [orderBy]: direction },
+          { [query.orderBy]: query.orderDir },
           { id: 'asc' }, // tiebreaker so pages stay stable
         ],
         skip,
@@ -68,14 +68,16 @@ export class UsersRepository implements IUsersRepository {
     return user;
   }
 
-  async findByEmailWithPassword(email: string): Promise<User | null> {
+  async findByEmailWithPassword(
+    email: string,
+  ): Promise<SafeUserWithPassword | null> {
     const user = await this.prisma.user.findUnique({
       where: { email },
       omit: { passwordHash: false },
     });
 
     this.logger.debug(
-      `findByEmail(${email}) → ${user ? 'found' : 'not found'}`,
+      `findByEmailWithPassword(${email}) → ${user ? 'found' : 'not found'}`,
     );
     return user;
   }
@@ -88,12 +90,9 @@ export class UsersRepository implements IUsersRepository {
   }
 
   async update(id: string, data: UpdateUserData): Promise<SafeUser> {
-    const update = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== undefined),
-    );
     const result = await this.prisma.user.update({
       where: { id },
-      data: update,
+      data,
     });
 
     this.logger.debug(`update(${id}), data(${data}), result(${result})))`);
@@ -109,8 +108,8 @@ export class UsersRepository implements IUsersRepository {
     this.logger.debug(`delete(${id}), deletedUser(${res})`);
   }
 
-  findByValidResetToken(tokenHash: string): Promise<SafeUser | null> {
-    return this.prisma.user.findFirst({
+  async findByValidResetToken(tokenHash: string): Promise<SafeUser | null> {
+    return await this.prisma.user.findFirst({
       where: {
         resetTokenHash: tokenHash,
         resetTokenExpiresAt: { gt: new Date() },

@@ -21,11 +21,14 @@ export class MessageSenderService {
   /** Never throws, so callers can use `void sender.reply(...)`. */
   async reply(req: SendableRequest, text: string): Promise<void> {
     try {
+      if (!req.client)
+        throw new GraphError('client is missing', false);
       const token = await this.clients.getAccessToken(req.client.id);
       if (!token)
         throw new GraphError('No access token stored for this client', false);
       if (!req.senderId) throw new GraphError('senderId is missing', false);
 
+      this.logger.log(req.client);
       const url = `${this.graph.host(req.platform)}/${req.accountId}/messages`;
       for (let i = 0; i < text.length; i += DM_LIMIT) {
         await this.graph.post(

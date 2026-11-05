@@ -11,6 +11,7 @@ import { MessageSenderService } from './message-sender.service';
 import { GraphApiService } from './graph-api.service';
 import { CommentReplyService } from './comment-reply.service';
 import { AttachmentHandlerService } from './attachment-handler.service';
+import { CommentClassifierService } from './comment-classifier.service';
 
 @Module({
   imports: [ClientsModule],
@@ -25,6 +26,7 @@ import { AttachmentHandlerService } from './attachment-handler.service';
     MessageSenderService,
     CommentReplyService,
     AttachmentHandlerService,
+    CommentClassifierService,
   ],
   exports: [PriorityInboxService],
 })

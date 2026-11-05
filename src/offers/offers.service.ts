@@ -1,28 +1,24 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { CreateOfferDto } from './dto/create-offer.dto';
-import { UpdateOfferDto } from './dto/update-offer.dto';
 import {
   IOffersRepository,
   OFFERS_REPOSITORY,
 } from './repositories/IOffersRepository.repository';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
 import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { Offer } from '@app/generated/prisma/client';
 import { Prisma } from '@app/generated/prisma/client';
+import { CreateOfferInput, UpdateOfferInput } from './schemas/offer.schema';
+import { QueryOfferInput } from './schemas/query-offer.schema';
 
 @Injectable()
 export class OffersService {
   constructor(
     @Inject(OFFERS_REPOSITORY) private readonly repo: IOffersRepository,
   ) {}
-  create(dto: CreateOfferDto): Promise<Offer> {
-    return this.repo.create({
-      ...dto,
-      discountValue: new Prisma.Decimal(dto.discountValue),
-    });
+  create(input: CreateOfferInput): Promise<Offer> {
+    return this.repo.create(input);
   }
 
-  findAll(query?: BaseQueryDto): Promise<PaginatedResult<Offer>> {
+  findAll(query: QueryOfferInput): Promise<PaginatedResult<Offer>> {
     return this.repo.findAll(query);
   }
 
@@ -32,11 +28,11 @@ export class OffersService {
     return result;
   }
 
-  update(id: string, dto: UpdateOfferDto): Promise<Offer> {
+  update(id: string, input: UpdateOfferInput): Promise<Offer> {
     return this.repo.update(id, {
-      ...dto,
-      ...(dto.discountValue !== undefined && {
-        discountValue: new Prisma.Decimal(dto.discountValue),
+      ...input,
+      ...(input.discountValue !== undefined && {
+        discountValue: new Prisma.Decimal(input.discountValue),
       }),
     });
   }

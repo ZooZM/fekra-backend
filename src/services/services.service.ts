@@ -1,28 +1,30 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { CreateServiceDto } from './dto/create-service.dto';
-import { UpdateServiceDto } from './dto/update-service.dto';
 import {
   IServicesRepository,
   SERVICES_REPOSITORY,
 } from './repositories/IServicesRepository.repository';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
 import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { Service } from '@app/generated/prisma/client';
 import { Prisma } from '@app/generated/prisma/client';
+import {
+  CreateServiceInput,
+  UpdateServiceInput,
+} from './schemas/service.schema';
+import { QueryServiceInput } from './schemas/query-service.schema';
 
 @Injectable()
 export class ServicesService {
   constructor(
     @Inject(SERVICES_REPOSITORY) private readonly repo: IServicesRepository,
   ) {}
-  create(dto: CreateServiceDto): Promise<Service> {
+  create(input: CreateServiceInput): Promise<Service> {
     return this.repo.create({
-      ...dto,
-      variants: dto.variants as Prisma.InputJsonValue | undefined,
+      ...input,
+      variants: input.variants as Prisma.InputJsonValue | undefined,
     });
   }
 
-  findAll(query?: BaseQueryDto): Promise<PaginatedResult<Service>> {
+  findAll(query: QueryServiceInput): Promise<PaginatedResult<Service>> {
     return this.repo.findAll(query);
   }
 
@@ -32,10 +34,10 @@ export class ServicesService {
     return result;
   }
 
-  update(id: string, dto: UpdateServiceDto): Promise<Service> {
+  update(id: string, input: UpdateServiceInput): Promise<Service> {
     return this.repo.update(id, {
-      ...dto,
-      variants: dto.variants as Prisma.InputJsonValue | undefined,
+      ...input,
+      variants: input.variants as Prisma.InputJsonValue | undefined,
     });
   }
 

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -13,6 +13,7 @@ import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
 import { InboxModule } from './inbox/inbox.module';
+import { AppZodValidationPipe } from './common/pipes/zod-validation.pipe';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
@@ -43,6 +44,10 @@ function devModules() {
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_PIPE,
+      useClass: AppZodValidationPipe,
+    },
     {
       provide: APP_FILTER,
       useClass: GeneralExceptionsFilter,

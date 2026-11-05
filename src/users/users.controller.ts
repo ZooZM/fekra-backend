@@ -2,19 +2,23 @@ import {
   Controller,
   Get,
   Body,
-  Patch,
   UseGuards,
   Param,
   Post,
   Put,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 import { CurrentUser } from '@app/auth/decorators/current-user.decorator';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { AdminCreateUserDto } from './dto/admin-create-user.dto';
-import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
+import {
+  AdminCreateUserDto,
+  AdminUpdateUserDto,
+  QueryUserDto,
+  UpdateUserDto,
+} from './schemas/user.schema';
+import { IdParamDto } from '@app/common/zod/dtos';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -24,20 +28,22 @@ export class UsersController {
   // ───────────── Get ─────────────
 
   @Get('me')
-  getMe(@CurrentUser('id') userId: string) {
-    return this.usersService.findById(userId);
+  getMe(@CurrentUser('id') { id }: IdParamDto) {
+    return this.usersService.findById(id);
   }
 
   @Get('admin')
-  adminFindAll() {
-    return this.usersService.findAll();
+  adminFindAll(@Query() query: QueryUserDto) {
+    return this.usersService.findAll(query);
   }
 
   @Get('admin/:id')
-  adminGetUserById(@Param('id') userId: string) {
-    return this.usersService.findById(userId);
+  adminGetUserById(@Param('id') { id }: IdParamDto) {
+    return this.usersService.findById(id);
   }
 
+  // TODO: consider removing this endpoint and using the email param in the query instead
+  // TODO: since this might cause errors handling the email param in the URL
   @Get('admin/email/:email')
   getUserByEmail(@Param('email') email: string) {
     return this.usersService.findByEmail(email);
@@ -53,20 +59,23 @@ export class UsersController {
   // ───────────── Put ─────────────
 
   @Put('me')
-  updateMe(@CurrentUser('id') userId: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(userId, dto);
+  updateMe(@CurrentUser('id') { id }: IdParamDto, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
   }
 
   @Put('admin/:id')
-  adminUpdate(@Param('id') userId: string, @Body() dto: AdminUpdateUserDto) {
-    return this.usersService.adminUpdate(userId, dto);
+  adminUpdate(
+    @Param('id') { id }: IdParamDto,
+    @Body() dto: AdminUpdateUserDto,
+  ) {
+    return this.usersService.adminUpdate(id, dto);
   }
 
   // ───────────── Delete ─────────────
 
   @Delete('admin/:id')
-  adminDelete(@Param('id') userId: string) {
-    return this.usersService.remove(userId);
+  adminDelete(@Param('id') { id }: IdParamDto) {
+    return this.usersService.remove(id);
   }
 
   // @Post()

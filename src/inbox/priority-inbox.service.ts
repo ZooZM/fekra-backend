@@ -14,6 +14,8 @@ import { N8nDeliveryService } from './n8n-delivery.service';
 import { ConfigService } from '@nestjs/config';
 import { ClientsService } from '@app/clients/clients.service';
 import { AttachmentHandlerService } from './attachment-handler.service';
+import { CommentClassifierService } from './comment-classifier.service';
+import { CommentReplyService } from './comment-reply.service';
 
 @Injectable()
 export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
@@ -27,6 +29,8 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly clientsService: ClientsService,
     private readonly attachments: AttachmentHandlerService,
+    private readonly commentClassifier: CommentClassifierService,
+    private readonly commentReply: CommentReplyService,
   ) {}
 
   private num(name: string, fallback: number): number {
@@ -177,7 +181,38 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
         break;
       }
 
-      case 'comment':
+      case 'comment': {
+        const client = await this.clientsService.getClientDataForWorkFlow(
+          item.accountId,
+        );
+        if (!client) {
+          this.logger.warn(
+            `No client for account ${item.accountId}, dropping comment ${item.id}`,
+          );
+          return;
+        }
+
+        const { type, reason } = this.commentClassifier.classify(item.text);
+        this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
+
+        if (type === 'engagement') {
+          // handled entirely in Nest: random canned reply + like, no n8n and no LLM cost
+          await this.commentReply.handleEngagement({
+            ...item,
+            clientId: client.id,
+            client,
+          });
+          return;
+        }
+
+        // TODO: if the comment is classified as 'inquiry' or 'unsure', send it to a small LLM to decide in one word ("inquiry" or "engagement")
+        await this.delivery.send(`${item.platform}-comment-${item.id}`, {
+          ...item,
+          client,
+          commentTypeHint: type, // 'inquiry' or 'unsure': n8n confirms or corrects it
+        });
+        break;
+      }
       case 'batch': {
         const client = await this.clientsService.getClientDataForWorkFlow(
           item.accountId,
@@ -188,10 +223,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           );
           return;
         }
-        const id =
-          item.kind === 'comment'
-            ? `${item.platform}-comment-${item.id}`
-            : item.id;
+        const id = item.id;
         await this.delivery.send(id, { ...item, client });
         break;
       }

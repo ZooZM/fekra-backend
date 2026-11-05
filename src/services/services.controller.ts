@@ -11,9 +11,11 @@ import {
   Put,
 } from '@nestjs/common';
 import { ServicesService } from './services.service';
-import { CreateServiceDto } from './dto/create-service.dto';
-import { UpdateServiceDto } from './dto/update-service.dto';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
+import {
+  CreateServiceDto,
+  UpdateServiceDto,
+} from './schemas/service.schema';
+import { QueryServiceDto } from './schemas/query-service.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 
 @Controller('services')
@@ -22,12 +24,12 @@ export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
   @Post()
-  create(@Body() createServiceDto: CreateServiceDto) {
-    return this.servicesService.create(createServiceDto);
+  create(@Body() dto: CreateServiceDto) {
+    return this.servicesService.create(dto);
   }
 
   @Get()
-  findAll(@Query() query: BaseQueryDto) {
+  findAll(@Query() query: QueryServiceDto) {
     return this.servicesService.findAll(query);
   }
 
@@ -37,8 +39,8 @@ export class ServicesController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateServiceDto: UpdateServiceDto) {
-    return this.servicesService.update(id, updateServiceDto);
+  update(@Param('id') id: string, @Body() dto: UpdateServiceDto) {
+    return this.servicesService.update(id, dto);
   }
 
   @Delete(':id')

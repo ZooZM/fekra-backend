@@ -3,46 +3,46 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { BusinessInfoService } from './business-info.service';
-import { CreateBusinessInfoDto } from './dto/create-business-info.dto';
-import { UpdateBusinessInfoDto } from './dto/update-business-info.dto';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
+import { CreateBusinessInfoDto } from './schemas/business-info.schema';
+import { IdParamDto } from '@app/common/zod/dtos';
 
 @Controller('business-info')
 @UseGuards(JwtAuthGuard)
 export class BusinessInfoController {
   constructor(private readonly businessInfoService: BusinessInfoService) {}
 
-  @Post()
-  create(@Body() createBusinessInfoDto: CreateBusinessInfoDto) {
-    return this.businessInfoService.create(createBusinessInfoDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.businessInfoService.findAll();
-  }
-
-  @Get(':id')
-  findByClientId(@Param('id') id: string) {
-    return this.businessInfoService.findByClientId(id);
-  }
-
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateBusinessInfoDto: UpdateBusinessInfoDto,
+  // TODO: should be a sub routes in clinet route, like /clients/:clientId/business-info
+  @Post('client/:clientId')
+  create(
+    @Param('clientId') clientId: string,
+    @Body() dto: CreateBusinessInfoDto,
   ) {
-    return this.businessInfoService.update(id, updateBusinessInfoDto);
+    const dtoWithClientId = { ...dto, clientId };
+    return this.businessInfoService.create(dtoWithClientId);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.businessInfoService.remove(id);
+  @Get('client/:clientId')
+  findByClientId(@Param('clientId') clientId: string) {
+    return this.businessInfoService.findByClientId(clientId);
+  }
+
+  @Put('client/:clientId')
+  updateByClientId(
+    @Param('clientId') clientId: string,
+    @Body() dto: CreateBusinessInfoDto,
+  ) {
+    return this.businessInfoService.update(clientId, dto);
+  }
+
+  @Delete('client/:clientId')
+  removeByClientId(@Param('clientId') clientId: string) {
+    return this.businessInfoService.remove(clientId);
   }
 }

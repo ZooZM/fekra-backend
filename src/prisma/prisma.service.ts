@@ -17,8 +17,12 @@ export class PrismaService
       omit: {
         user: {
           passwordHash: true,
+          passwordChangedAt: true,
           resetTokenHash: true,
           resetTokenExpiresAt: true,
+        },
+        client: {
+          accessToken: true,
         },
       },
     });

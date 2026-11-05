@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { UnprocessableEntityException, ValidationPipe } from '@nestjs/common';
 import { ValidationError } from 'class-validator';
 import { AppModule } from './app.module';
+import { ZodValidationPipe } from 'nestjs-zod';
 
 const flatten = (
   errors: ValidationError[],
@@ -18,10 +19,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.useGlobalPipes(
+    new ZodValidationPipe(),
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
       exceptionFactory: (errors) =>
         new UnprocessableEntityException({
           message: 'Validation failed',

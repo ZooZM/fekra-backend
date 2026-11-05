@@ -1,18 +1,18 @@
 import { IBaseRepository } from '@common/repositories/base.repository.interface';
-import { Client } from '@app/generated/prisma/client';
 import { CreateClientData } from '../interfaces/create-client-data.interface';
 import { UpdateClientData } from '../interfaces/update-client-data.interface';
+import { ClientRecord, ClientWorkflowData } from '../types/client.types';
+import { QueryClientInput } from '../schemas/query-client.schema';
 
 export const CLIENTS_REPOSITORY = 'CLIENTS_REPOSITORY';
 
 export interface IClientsRepository extends IBaseRepository<
-  Client,
+  ClientRecord,
   CreateClientData,
-  UpdateClientData
+  UpdateClientData,
+  QueryClientInput
 > {
-  getClientDataForWorkFlow(
-    brandId: string,
-  ): Promise<Omit<Client, 'accessToken'> | null>;
+  getClientDataForWorkFlow(brandId: string): Promise<ClientWorkflowData | null>;
   getAccessToken(clientId: string): Promise<string | null>;
-  setAccessToken(clientId: string, token: string): Promise<void>;
+  setAccessToken(clientId: string, encryptedToken: string): Promise<void>;
 }

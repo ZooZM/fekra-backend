@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CreateBusinessInfoDto } from './dto/create-business-info.dto';
-import { UpdateBusinessInfoDto } from './dto/update-business-info.dto';
 import {
   IBusinessInfoRepository,
   BUSINESS_INFO_REPOSITORY,
 } from './repositories/IBusinessInfoRepository.repository';
 import { BusinessInfo } from '@app/generated/prisma/client';
+import {
+  CreateBusinessInfoInput,
+  UpdateBusinessInfoInput,
+} from './schemas/business-info.schema';
+import { BusinessInfoRecord } from './interfaces/business-info.interface';
 
 @Injectable()
 export class BusinessInfoService {
@@ -13,20 +16,19 @@ export class BusinessInfoService {
     @Inject(BUSINESS_INFO_REPOSITORY)
     private readonly repo: IBusinessInfoRepository,
   ) {}
-  create(dto: CreateBusinessInfoDto): Promise<BusinessInfo> {
-    return this.repo.create(dto);
+  create(input: CreateBusinessInfoInput): Promise<BusinessInfoRecord> {
+    return this.repo.create(input);
   }
 
-  findAll() {
-    return this.repo.findAll();
-  }
-
-  findByClientId(clientId: string): Promise<BusinessInfo | null> {
+  findByClientId(clientId: string): Promise<BusinessInfoRecord | null> {
     return this.repo.findByClientId(clientId);
   }
 
-  update(clientId: string, dto: UpdateBusinessInfoDto): Promise<BusinessInfo> {
-    return this.repo.update(clientId, dto);
+  update(
+    clientId: string,
+    input: UpdateBusinessInfoInput,
+  ): Promise<BusinessInfoRecord> {
+    return this.repo.update(clientId, input);
   }
 
   remove(clientId: string): Promise<void> {

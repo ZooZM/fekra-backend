@@ -1,3 +1,5 @@
-import { Prisma } from '@app/generated/prisma/client';
+import { UpdateClientInput } from '../schemas/client.schema';
 
-export type UpdateClientData = Prisma.ClientUpdateInput;
+export type UpdateClientData = Omit<UpdateClientInput, 'accessToken'> & {
+  accessToken?: string;
+};

@@ -1,13 +1,18 @@
-import { BusinessInfo } from '@app/generated/prisma/client';
-import { CreateBusinessInfoDto } from '../dto/create-business-info.dto';
-import { UpdateBusinessInfoDto } from '../dto/update-business-info.dto';
+// clients/repositories/business-info.repository.interface.ts
+import {
+  BusinessInfoRecord,
+  CreateBusinessInfoData,
+  UpdateBusinessInfoData,
+} from '../interfaces/business-info.interface';
 
 export const BUSINESS_INFO_REPOSITORY = 'BUSINESS_INFO_REPOSITORY';
 
 export interface IBusinessInfoRepository {
-  findAll(): Promise<BusinessInfo[]>;
-  findByClientId(clientId: string): Promise<BusinessInfo | null>;
-  create(data: CreateBusinessInfoDto): Promise<BusinessInfo>;
-  update(clientId: string, data: UpdateBusinessInfoDto): Promise<BusinessInfo>;
+  findByClientId(clientId: string): Promise<BusinessInfoRecord | null>;
+  create(data: CreateBusinessInfoData): Promise<BusinessInfoRecord>;
+  update(
+    clientId: string,
+    data: UpdateBusinessInfoData,
+  ): Promise<BusinessInfoRecord>;
   delete(clientId: string): Promise<void>;
 }

@@ -7,7 +7,10 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UsersService } from '@app/users/users.service';
-import { SafeUser } from '@app/users/types/safe-user.type';
+import {
+  SafeUser,
+  SafeUserWithPasswordChangedAt,
+} from '@app/users/types/safe-user.type';
 
 interface JwtPayload {
   sub: string;
@@ -29,9 +32,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<SafeUser> {
-    let user: SafeUser;
+    let user: SafeUserWithPasswordChangedAt;
     try {
-      user = await this.usersService.findById(payload.sub);
+      user = await this.usersService.findByIdWithPassowrdChangedAt(payload.sub);
     } catch (e) {
       if (e instanceof NotFoundException) throw new UnauthorizedException();
       throw e;
@@ -47,6 +50,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
 
-    return user;
+    return user as SafeUser;
   }
 }

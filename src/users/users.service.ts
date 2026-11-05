@@ -8,18 +8,21 @@ import {
   IUsersRepository,
   USERS_REPOSITORY,
 } from './repositories/IUsersRepository.repository';
-import { SafeUser, UserWithPassword } from './types/safe-user.type';
+import {
+  SafeUser,
+  SafeUserWithPassword,
+  SafeUserWithPasswordChangedAt,
+} from './types/safe-user.type';
 import { PaginatedResult } from '@app/common/helpers/pagination.helper';
-import { QueryUserDto } from './dto/query-user.dto';
-import { AdminCreateUserDto } from './dto/admin-create-user.dto';
-import * as bcrypt from 'bcrypt';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { UserRole } from '@app/generated/prisma/enums';
-import { CreateUserDto } from './dto/create-user.dto';
 import * as authConstants from '@app/auth/consts/auth.contants';
-import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
-
-const normalizeEmail = (email: string) => email.toLowerCase().trim();
+import {
+  AdminCreateUserInput,
+  AdminUpdateUserInput,
+  CreateUserInput,
+  QueryUserInput,
+  UpdateUserInput,
+} from './schemas/user.schema';
 
 @Injectable()
 export class UsersService {
@@ -29,7 +32,7 @@ export class UsersService {
 
   // ───────────── Reads ─────────────
 
-  findAll(query?: QueryUserDto): Promise<PaginatedResult<SafeUser>> {
+  findAll(query: QueryUserInput): Promise<PaginatedResult<SafeUser>> {
     return this.repo.findAll(query);
   }
 
@@ -39,66 +42,74 @@ export class UsersService {
     return user;
   }
 
-  // Used by the auth module (returns null instead of throwing)
-  findByEmail(email: string): Promise<SafeUser | null> {
-    return this.repo.findByEmail(normalizeEmail(email));
+  async findByIdWithPassowrdChangedAt(
+    id: string,
+  ): Promise<SafeUserWithPasswordChangedAt> {
+    const user = await this.repo.findByIdWithPassowrdChangedAt(id);
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
-  findByEmailWithPassword(email: string): Promise<UserWithPassword | null> {
-    return this.repo.findByEmailWithPassword(normalizeEmail(email));
+  // Used by the auth module (returns null instead of throwing)
+  findByEmail(email: string): Promise<SafeUser | null> {
+    return this.repo.findByEmail(email);
+  }
+
+  findByEmailWithPassword(email: string): Promise<SafeUserWithPassword | null> {
+    return this.repo.findByEmailWithPassword(email);
   }
 
   // ───────────── Create ─────────────
 
   /**
-   * Public signup (auth module) passes a plain CreateUserDto, so roles/clientId are
+   * Public signup (auth module) passes a plain CreateUserInput, so roles/clientId are
    * undefined and the DB default role applies. Only the admin endpoint can set them.
    * A duplicate email throws P2002, which the exception filter turns into a 409.
    */
-  async create(createUserDto: CreateUserDto): Promise<SafeUser> {
+  async create(input: CreateUserInput): Promise<SafeUser> {
     return await this.repo.create({
-      name: createUserDto.name,
-      email: normalizeEmail(createUserDto.email),
-      passwordHash: createUserDto.passwordHash,
+      name: input.name,
+      email: input.email,
+      passwordHash: input.passwordHash,
     });
   }
 
-  async adminCreate(adminCreateUserDto: AdminCreateUserDto): Promise<SafeUser> {
-    const passwordHash = await authConstants.hash(adminCreateUserDto.password);
+  async adminCreate(input: AdminCreateUserInput): Promise<SafeUser> {
+    const passwordHash = await authConstants.hash(input.password);
 
     return await this.repo.create({
-      name: adminCreateUserDto.name,
-      email: normalizeEmail(adminCreateUserDto.email),
+      name: input.name,
+      email: input.email,
       passwordHash,
-      roles: adminCreateUserDto.roles,
-      clientId: adminCreateUserDto.clientId,
+      roles: input.roles,
+      clientId: input.clientId,
     });
   }
 
   // ───────────── Profile update (name only) ─────────────
 
-  async update(id: string, dto: UpdateUserDto): Promise<SafeUser> {
-    if (dto.name === undefined) {
+  async update(id: string, input: UpdateUserInput): Promise<SafeUser> {
+    if (input.name === undefined) {
       throw new BadRequestException('Nothing to update');
     }
-    return this.repo.update(id, { name: dto.name });
+    return this.repo.update(id, { name: input.name });
   }
 
   async adminUpdate(
     id: string,
-    adminUpdateDto: AdminUpdateUserDto,
+    input: AdminUpdateUserInput,
   ): Promise<SafeUser> {
     let passwordHash: string | undefined;
-    if (adminUpdateDto.password !== undefined) {
-      passwordHash = await authConstants.hash(adminUpdateDto.password);
+    if (input.password !== undefined) {
+      passwordHash = await authConstants.hash(input.password);
     }
 
     return this.repo.update(id, {
-      name: adminUpdateDto.name,
-      email: adminUpdateDto.email,
+      name: input.name,
+      email: input.email,
       passwordHash: passwordHash !== undefined ? passwordHash : undefined,
-      roles: adminUpdateDto.roles,
-      clientId: adminUpdateDto.clientId,
+      roles: input.roles,
+      clientId: input.clientId,
     });
   }
 
@@ -111,7 +122,7 @@ export class UsersService {
   }
 
   updateEmail(id: string, email: string): Promise<SafeUser> {
-    return this.repo.updateEmail(id, normalizeEmail(email));
+    return this.repo.updateEmail(id, email);
   }
 
   setRoles(id: string, roles: UserRole[]): Promise<SafeUser> {
