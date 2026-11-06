@@ -1,0 +1,22 @@
+$kind: http-request
+description: |-
+  Updates the currently authenticated user's profile.
+
+  **Body:** `UpdateUserDto`
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/users/me"
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Jane Updated"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 2000

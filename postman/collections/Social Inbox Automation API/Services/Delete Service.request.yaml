@@ -1,0 +1,11 @@
+$kind: http-request
+description: Deletes a service.
+url: "{{baseUrl}}/services/:id"
+method: DELETE
+pathVariables:
+  id: "{{resourceId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));
+    language: text/javascript
+order: 5000

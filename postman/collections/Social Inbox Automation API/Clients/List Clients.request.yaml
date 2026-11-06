@@ -1,0 +1,25 @@
+$kind: http-request
+description: |-
+  Lists clients.
+
+  **Query:** `QueryClientDto`
+url: "{{baseUrl}}/clients?page=1&limit=20"
+method: GET
+queryParams:
+  - key: page
+    value: "1"
+    disabled: false
+    description: Page number
+  - key: limit
+    value: "20"
+    disabled: false
+    description: Page size
+  - key: search
+    value: ""
+    disabled: true
+    description: Free-text search
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 2000

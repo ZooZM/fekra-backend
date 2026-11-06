@@ -1,0 +1,26 @@
+$kind: http-request
+description: Meta's verification challenge. Returns `hub.challenge` as plain text if `hub.verify_token` matches the server's configured token.
+url: "{{baseUrl}}/webhooks/meta?hub.mode=subscribe&hub.verify_token={{metaVerifyToken}}&hub.challenge=1234567890"
+method: GET
+queryParams:
+  - key: hub.mode
+    value: subscribe
+    disabled: false
+    description: Always `subscribe`
+  - key: hub.verify_token
+    value: "{{metaVerifyToken}}"
+    disabled: false
+    description: Must match the server's verify token
+  - key: hub.challenge
+    value: "1234567890"
+    disabled: false
+    description: Echoed back on success
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+      pm.test('Challenge echoed', () => pm.expect(pm.response.text()).to.eql('1234567890'));
+    language: text/javascript
+order: 1000

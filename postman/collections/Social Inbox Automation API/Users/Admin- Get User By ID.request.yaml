@@ -1,0 +1,15 @@
+$kind: http-request
+name: "Admin: Get User By ID"
+description: |-
+  Fetches a user by id. Path param `id` is validated by `IdParamDto`. Uses `{{resourceId}}`.
+
+  Tip: set the `resourceId` collection variable first.
+url: "{{baseUrl}}/users/admin/:id"
+method: GET
+pathVariables:
+  id: "{{resourceId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 4000

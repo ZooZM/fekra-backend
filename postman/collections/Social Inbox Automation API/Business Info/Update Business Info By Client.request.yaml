@@ -1,0 +1,27 @@
+$kind: http-request
+description: |-
+  Replaces/updates the business info of a client. Note: this endpoint reuses `CreateBusinessInfoDto`, so send the full object.
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/business-info/client/:clientId"
+method: PUT
+headers:
+  Content-Type: application/json
+pathVariables:
+  clientId: "{{clientId}}"
+body:
+  type: json
+  content: |-
+    {
+      "businessName": "Acme Coffee Roasters",
+      "description": "Specialty coffee roaster",
+      "phone": "+201000000000",
+      "address": "12 Nile St, Giza",
+      "workingHours": "Daily 8am-11pm",
+      "website": "https://acmecoffee.com"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 3000

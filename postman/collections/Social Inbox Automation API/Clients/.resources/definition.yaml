@@ -1,0 +1,3 @@
+$kind: collection
+description: CRUD for clients. Requires JWT. The access-token endpoint additionally requires the `ADMIN` role (`RolesGuard`).
+order: 3000

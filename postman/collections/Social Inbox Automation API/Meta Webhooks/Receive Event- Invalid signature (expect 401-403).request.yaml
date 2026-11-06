@@ -1,0 +1,22 @@
+$kind: http-request
+name: "Receive Event: Invalid signature (expect 401/403)"
+description: "Negative test: sends a wrong signature. The exact status depends on `MetaWebhookService.verifySignature` (typically 401/403)."
+url: "{{baseUrl}}/webhooks/meta"
+method: POST
+headers:
+  x-hub-signature-256: sha256=invalid
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "object": "page",
+      "entry": []
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: pm.test('Rejected', () => pm.expect(pm.response.code).to.be.oneOf([400, 401, 403]));
+    language: text/javascript
+order: 6000

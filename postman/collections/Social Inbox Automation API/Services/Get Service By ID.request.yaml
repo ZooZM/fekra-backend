@@ -1,0 +1,11 @@
+$kind: http-request
+description: Fetches a service. Uses `{{resourceId}}` (copy from `serviceId`).
+url: "{{baseUrl}}/services/:id"
+method: GET
+pathVariables:
+  id: "{{resourceId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 3000

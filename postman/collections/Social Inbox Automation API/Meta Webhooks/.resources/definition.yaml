@@ -1,0 +1,9 @@
+$kind: collection
+description: |-
+  Webhook endpoint for Meta (Facebook Pages + Instagram). **No JWT.**
+
+  - `GET` is the subscription verification handshake.
+  - `POST` receives events and is verified via `x-hub-signature-256` (HMAC-SHA256 of the **raw body** with the app secret). The requests below compute the signature automatically in a pre-request script using the `metaAppSecret` variable.
+
+  Events are processed asynchronously; the endpoint always answers `200 {received:true}` once the signature is valid.
+order: 8000

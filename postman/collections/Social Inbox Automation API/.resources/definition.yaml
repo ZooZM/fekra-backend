@@ -1,0 +1,44 @@
+$kind: collection
+description: |-
+  Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).
+
+  ## Getting started
+  1. Set the `baseUrl` collection variable (default `http://localhost:3000`).
+  2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.
+  3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).
+  4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.
+
+  ## Variables
+  | Variable | Purpose |
+  |---|---|
+  | `baseUrl` | API root |
+  | `accessToken` | JWT (auto-filled on login) |
+  | `userEmail` | Email for login / user lookup |
+  | `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |
+  | `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |
+  | `metaVerifyToken` | Must equal server webhook verify token |
+  | `metaAppSecret` | Meta app secret used to sign webhook payloads |
+  | `pageId`, `igAccountId` | Ids used in sample webhook payloads |
+
+  ## Notes
+  - Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.
+  - Roles: only `PUT /clients/:id/access-token` enforces `ADMIN` via `RolesGuard` in the supplied controllers.
+variables:
+  baseUrl: http://localhost:3000
+  accessToken: ""
+  userEmail: jane@example.com
+  clientId: ""
+  offerId: ""
+  serviceId: ""
+  resourceId: ""
+  n8nWebhookSecret: change-me
+  metaVerifyToken: change-me
+  metaAppSecret: change-me
+  pageId: "100000000000000"
+  igAccountId: "17840000000000000"
+auth:
+  - id: f4bfad53-8900-45ec-b8dc-9e26f713d0c8
+    type: bearer
+    name: bearer auth
+    credentials:
+      token: "{{accessToken}}"

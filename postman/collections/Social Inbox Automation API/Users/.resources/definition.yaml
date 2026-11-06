@@ -1,0 +1,6 @@
+$kind: collection
+description: |-
+  User management. All routes require a valid JWT (`JwtAuthGuard`). Routes under `/users/admin` are intended for administrators.
+
+  **Note:** `RolesGuard` is not applied to the `/users/admin/*` routes in the controller shown, so enforcement depends on the service layer.
+order: 2000

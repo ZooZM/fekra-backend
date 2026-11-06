@@ -1,0 +1,24 @@
+$kind: http-request
+description: |-
+  Partially updates an offer.
+
+  **Body:** `UpdateOfferDto`
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/offers/:id"
+method: PATCH
+headers:
+  Content-Type: application/json
+pathVariables:
+  id: "{{resourceId}}"
+body:
+  type: json
+  content: |-
+    {
+      "title": "Weekend Special (Extended)"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 4000

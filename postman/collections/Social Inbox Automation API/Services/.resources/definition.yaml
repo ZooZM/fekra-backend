@@ -1,0 +1,3 @@
+$kind: collection
+description: "CRUD for services. Requires JWT. Note: updates use **PUT** (not PATCH) on this resource."
+order: 6000

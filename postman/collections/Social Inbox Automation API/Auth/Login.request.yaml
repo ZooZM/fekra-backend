@@ -1,0 +1,33 @@
+$kind: http-request
+description: |-
+  Authenticates with `LocalGuard` (Passport local strategy). The controller returns `request.user` as-is.
+
+  **Auth:** none (credentials in body)
+
+  The test script tries to extract a token from the response (`accessToken`, `access_token` or `token`) and stores it in the `accessToken` collection variable, which is used as the Bearer token for every other request. If your login response uses a different field name, edit the test script on this request.
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{userEmail}}",
+      "password": "StrongP@ssw0rd"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));
+      const json = pm.response.json();
+      const d = json.data || {};
+      const token = json.accessToken || json.access_token || json.token || d.accessToken || d.access_token || d.token;
+      if (token) { pm.collectionVariables.set('accessToken', token); console.log('accessToken saved'); }
+      else { console.warn('No token found in login response - set accessToken manually.'); }
+    language: text/javascript
+order: 2000

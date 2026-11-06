@@ -1,0 +1,30 @@
+$kind: http-request
+name: "Callback: Comment Reply (question)"
+description: |-
+  For `question` comments: send a DM and a public reply that depends on whether the DM could be delivered.
+
+  - `dmText`: private message text
+  - `publicReplyIfDmSent`: public reply if the DM was sent
+  - `publicReplyIfDmClosed`: public reply if the DM window is closed
+url: "{{baseUrl}}/n8n/callback"
+method: POST
+headers:
+  x-webhook-secret: "{{n8nWebhookSecret}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "id": "pending-request-id",
+      "type": "question",
+      "dmText": "Our opening hours are 8am-11pm daily.",
+      "publicReplyIfDmSent": "Sent you a DM with the details!",
+      "publicReplyIfDmClosed": "Please message us directly and we'll help right away."
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 3000

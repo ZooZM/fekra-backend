@@ -1,0 +1,24 @@
+$kind: http-request
+description: |-
+  Stores the client's access token (e.g. a Meta page/Instagram token).
+
+  **Requires:** `ADMIN` role (returns 403 otherwise).
+
+  **Body:** `{ "token": string }`
+url: "{{baseUrl}}/clients/:id/access-token"
+method: PUT
+headers:
+  Content-Type: application/json
+pathVariables:
+  id: "{{resourceId}}"
+body:
+  type: json
+  content: |-
+    {
+      "token": "EAAG...page-access-token"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));
+    language: text/javascript
+order: 6000

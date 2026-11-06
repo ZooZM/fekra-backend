@@ -1,0 +1,9 @@
+$kind: http-request
+description: Returns the profile of the currently authenticated user (id taken from the JWT via `@CurrentUser('id')`).
+url: "{{baseUrl}}/users/me"
+method: GET
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 1000

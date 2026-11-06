@@ -1,0 +1,29 @@
+$kind: http-request
+description: |-
+  Creates business info for a client. The controller merges the path `clientId` into the DTO.
+
+  **Body:** `CreateBusinessInfoDto`
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/business-info/client/:clientId"
+method: POST
+headers:
+  Content-Type: application/json
+pathVariables:
+  clientId: "{{clientId}}"
+body:
+  type: json
+  content: |-
+    {
+      "businessName": "Acme Coffee",
+      "description": "Specialty coffee roaster",
+      "phone": "+201000000000",
+      "address": "12 Nile St, Giza",
+      "workingHours": "Sat-Thu 8am-10pm",
+      "website": "https://acmecoffee.com"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));
+    language: text/javascript
+order: 1000

@@ -1,0 +1,27 @@
+$kind: http-request
+description: |-
+  Creates a client.
+
+  **Body:** `CreateClientDto`
+
+  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+url: "{{baseUrl}}/clients"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Acme Coffee",
+      "email": "owner@acmecoffee.com"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));
+      const json = pm.response.json();
+      const id = json.id || json._id || (json.data && (json.data.id || json.data._id));
+      if (id) { pm.collectionVariables.set('clientId', id); console.log('clientId saved:', id); }
+    language: text/javascript
+order: 1000

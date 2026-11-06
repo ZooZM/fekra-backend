@@ -1,0 +1,51 @@
+$kind: http-request
+name: "Receive Event: Facebook Page Comment (POST)"
+description: "Simulates a Facebook Page feed comment event (`object: page`, `changes` with `field: feed`)."
+url: "{{baseUrl}}/webhooks/meta"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "object": "page",
+      "entry": [
+        {
+          "id": "{{pageId}}",
+          "time": 1730000000,
+          "changes": [
+            {
+              "field": "feed",
+              "value": {
+                "item": "comment",
+                "verb": "add",
+                "comment_id": "{{pageId}}_c1",
+                "post_id": "{{pageId}}_p1",
+                "from": {
+                  "id": "1234567890",
+                  "name": "Test User"
+                },
+                "message": "Do you deliver?",
+                "created_time": 1730000000
+              }
+            }
+          ]
+        }
+      ]
+    }
+auth:
+  type: noauth
+scripts:
+  - type: beforeRequest
+    code: |-
+      // Computes X-Hub-Signature-256 = 'sha256=' + HMAC_SHA256(rawBody, metaAppSecret)
+      const secret = pm.collectionVariables.get('metaAppSecret');
+      const raw = pm.variables.replaceIn(pm.request.body.raw);
+      const sig = CryptoJS.HmacSHA256(raw, secret).toString(CryptoJS.enc.Hex);
+      pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + sig });
+    language: text/javascript
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 3000

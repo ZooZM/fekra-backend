@@ -1,0 +1,25 @@
+$kind: http-request
+name: "Callback: DM Batch Reply"
+description: |-
+  Used when the pending request is of kind `batch` (direct messages). Only `id` and `text` are used. Empty/blank `text` sends nothing.
+
+  **Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `400` missing id | `401` bad secret
+url: "{{baseUrl}}/n8n/callback"
+method: POST
+headers:
+  x-webhook-secret: "{{n8nWebhookSecret}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "id": "pending-request-id",
+      "text": "Hi! We're open daily from 8am to 11pm."
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 1000

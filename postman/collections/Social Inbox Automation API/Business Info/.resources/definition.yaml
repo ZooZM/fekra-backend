@@ -1,0 +1,6 @@
+$kind: collection
+description: |-
+  Business info attached to a client. Requires JWT. All routes are scoped by `clientId` (one record per client).
+
+  The controller has a TODO to move these under `/clients/:clientId/business-info`.
+order: 4000

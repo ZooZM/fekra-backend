@@ -1,0 +1,6 @@
+$kind: collection
+description: |-
+  Server-to-server callback invoked by the n8n workflow after the AI reply is generated. **No JWT.** Authenticated by the `x-webhook-secret` header, which must equal the `N8N_WEBHOOK_SECRET` env var.
+
+  The server looks up the pending request by `id` (`N8nDeliveryService.take`). If the id is unknown/duplicate/expired the response is `{ acknowledged: false }`. Replies are sent asynchronously (fire-and-forget).
+order: 7000

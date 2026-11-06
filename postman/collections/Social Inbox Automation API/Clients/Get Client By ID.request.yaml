@@ -1,0 +1,11 @@
+$kind: http-request
+description: Fetches a client. Uses `{{resourceId}}` (set it to a client id, or copy from `clientId`).
+url: "{{baseUrl}}/clients/:id"
+method: GET
+pathVariables:
+  id: "{{resourceId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    language: text/javascript
+order: 3000
