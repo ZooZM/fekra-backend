@@ -53,7 +53,7 @@ export class N8nCallbackController {
       const text = body.text?.trim();
       if (text) void this.messageSender.reply(req, text);
     } else {
-      void this.commentReply.handle(req, {
+      void this.commentReply.handleN8nReply(req, {
         type: body.type ?? 'engagement',
         publicReply: body.publicReply?.trim(),
         dmText: body.dmText?.trim(),

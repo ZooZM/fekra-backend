@@ -21,6 +21,8 @@ export type InboxItem =
       text?: string;
       postId?: string;
       raw?: unknown;
+      /** Failed LLM classification attempts so far (set when the comment is scheduled for a retry). */
+      llmAttempts?: number;
     })
   | (Base & {
       kind: 'message';

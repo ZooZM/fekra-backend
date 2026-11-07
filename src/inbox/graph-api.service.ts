@@ -25,10 +25,22 @@ const HOSTS: Record<Platform, string> = {
 const TEMPORARY_CODES = new Set([1, 2, 4, 17, 32, 613]);
 const SEND_DEAD = 'send:dead';
 
+interface GraphErrorBody {
+  error?: {
+    code?: number;
+    error_subcode?: number;
+    message?: string;
+    is_transient?: boolean;
+  };
+}
+
 export class GraphError extends Error {
   constructor(
     message: string,
     readonly temporary: boolean,
+    /** Meta's error code and subcode, e.g. 100/33 = object not found, 190 = bad token. */
+    readonly code?: number,
+    readonly subcode?: number,
   ) {
     super(message);
   }
@@ -49,29 +61,48 @@ export class GraphApiService {
     token: string,
     maxAttempts = 3,
   ): Promise<void> {
+    await this.send('POST', url, token, body, maxAttempts);
+  }
+
+  /** Same retry rules as `post`. Returns the parsed JSON body. */
+  async get<T>(url: string, token: string, maxAttempts = 3): Promise<T> {
+    const res = await this.send('GET', url, token, undefined, maxAttempts);
+    return (await res.json()) as T;
+  }
+
+  private async send(
+    method: 'GET' | 'POST',
+    url: string,
+    token: string,
+    body: unknown,
+    maxAttempts: number,
+  ): Promise<Response> {
     for (let attempt = 1; ; attempt++) {
       let error: GraphError;
       try {
         const res = await fetch(url, {
-          method: 'POST',
+          method,
           headers: {
-            'content-type': 'application/json',
+            ...(method === 'POST' && { 'content-type': 'application/json' }),
             authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(body),
+          body: method === 'POST' ? JSON.stringify(body) : undefined,
           signal: AbortSignal.timeout(10_000),
         });
-        if (res.ok) return;
+        if (res.ok) return res;
 
-        const e = ((await res.json().catch(() => ({}))) as any).error ?? {};
+        const payload = (await res.json().catch(() => ({}))) as GraphErrorBody;
+        const e = payload.error ?? {};
         const temporary =
           res.status >= 500 ||
           res.status === 429 ||
           e.is_transient === true ||
-          TEMPORARY_CODES.has(e.code);
+          (e.code !== undefined && TEMPORARY_CODES.has(e.code));
         error = new GraphError(
           `Graph ${res.status} code=${e.code} sub=${e.error_subcode}: ${e.message}`,
           temporary,
+          e.code,
+          e.error_subcode,
         );
       } catch (err) {
         error = new GraphError(

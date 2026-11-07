@@ -12,10 +12,13 @@ import { GraphApiService } from './graph-api.service';
 import { CommentReplyService } from './comment-reply.service';
 import { AttachmentHandlerService } from './attachment-handler.service';
 import { CommentClassifierService } from './comment-classifier.service';
+import { CommentLlmClassifierService } from './comment-llm-classifier.service';
+import { CommentBackfillService } from './comment-backfill.service';
+import { CommentBackfillController } from './comment-backfill.controller';
 
 @Module({
   imports: [ClientsModule],
-  controllers: [N8nCallbackController],
+  controllers: [N8nCallbackController, CommentBackfillController],
   providers: [
     ...redisProviders,
     PriorityInboxService,
@@ -27,6 +30,8 @@ import { CommentClassifierService } from './comment-classifier.service';
     CommentReplyService,
     AttachmentHandlerService,
     CommentClassifierService,
+    CommentLlmClassifierService,
+    CommentBackfillService,
   ],
   exports: [PriorityInboxService],
 })

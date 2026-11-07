@@ -22,7 +22,7 @@ description: |-
 
   ## Notes
   - Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.
-  - Roles: only `PUT /clients/:id/access-token` enforces `ADMIN` via `RolesGuard` in the supplied controllers.
+  - Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.
 variables:
   baseUrl: http://localhost:3000
   accessToken: ""

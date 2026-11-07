@@ -1,0 +1,2110 @@
+{
+  "info": {
+    "_postman_id": "1c530d55-62c9-55df-a8ae-e41f4db4c437",
+    "name": "Social Inbox Automation API",
+    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "id": "c3fa0110-249f-5ba9-a6f9-ba500ebf6187",
+      "name": "Auth",
+      "description": "Public endpoints for registration and login. **No JWT required.**",
+      "item": [
+        {
+          "id": "b08fc232-a042-593d-a6f8-73cbd7cc729b",
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"StrongP@ssw0rd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registers a new user via `AuthService.registerUser`.\n\n**Auth:** none\n\n**Body:** `RegisterUserDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "d4867afc-5382-5f16-a309-1c0df93ef619",
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "const d = json.data || {};",
+                  "const token = json.accessToken || json.access_token || json.token || d.accessToken || d.access_token || d.token;",
+                  "if (token) { pm.collectionVariables.set('accessToken', token); console.log('accessToken saved'); }",
+                  "else { console.warn('No token found in login response - set accessToken manually.'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"StrongP@ssw0rd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates with `LocalGuard` (Passport local strategy). The controller returns `request.user` as-is.\n\n**Auth:** none (credentials in body)\n\nThe test script tries to extract a token from the response (`accessToken`, `access_token` or `token`) and stores it in the `accessToken` collection variable, which is used as the Bearer token for every other request. If your login response uses a different field name, edit the test script on this request.\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "09d4e08a-6d0b-5b4a-a8c1-1b73a7e03f56",
+      "name": "Users",
+      "description": "User management. All routes require a valid JWT (`JwtAuthGuard`). Routes under `/users/admin` are intended for administrators.\n\n**Note:** `RolesGuard` is not applied to the `/users/admin/*` routes in the controller shown, so enforcement depends on the service layer.",
+      "item": [
+        {
+          "id": "6c659365-72be-5af6-aced-97fbbaac0705",
+          "name": "Get Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Returns the profile of the currently authenticated user (id taken from the JWT via `@CurrentUser('id')`)."
+          },
+          "response": []
+        },
+        {
+          "id": "1b700605-df83-5e69-aeb0-0cf66acb9a93",
+          "name": "Update Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Updates the currently authenticated user's profile.\n\n**Body:** `UpdateUserDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "cccb903c-09dd-59ea-ae61-a262554896c4",
+          "name": "Admin: List Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/admin?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Free-text search",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists users with filtering/pagination.\n\n**Query:** `QueryUserDto`"
+          },
+          "response": []
+        },
+        {
+          "id": "80dc4468-0303-500a-ac7a-a2c6631fd017",
+          "name": "Admin: Get User By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/admin/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Fetches a user by id. Path param `id` is validated by `IdParamDto`. Uses `{{resourceId}}`.\n\nTip: set the `resourceId` collection variable first."
+          },
+          "response": []
+        },
+        {
+          "id": "7ef35f6a-273c-53b4-a703-4f68b23dcdfc",
+          "name": "Admin: Get User By Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/admin/email/:email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin",
+                "email",
+                ":email"
+              ],
+              "variable": [
+                {
+                  "key": "email",
+                  "value": "{{userEmail}}"
+                }
+              ]
+            },
+            "description": "Fetches a user by email. Uses `{{userEmail}}`.\n\nURL-encode special characters such as `+` (`%2B`)."
+          },
+          "response": []
+        },
+        {
+          "id": "413697d7-b0b9-5b89-a4db-126eb524eb37",
+          "name": "Admin: Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "const id = json.id || json._id || (json.data && (json.data.id || json.data._id));",
+                  "if (id) { pm.collectionVariables.set('resourceId', id); console.log('resourceId saved:', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New User\",\n  \"email\": \"new.user@example.com\",\n  \"password\": \"StrongP@ssw0rd\",\n  \"role\": \"USER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin"
+              ]
+            },
+            "description": "Creates a user as an admin.\n\n**Body:** `AdminCreateUserDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "d6df8098-97f8-5a24-a3c5-e57ced6afbfc",
+          "name": "Admin: Update User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed User\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/admin/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Updates a user as an admin. Uses `{{resourceId}}`.\n\n**Body:** `AdminUpdateUserDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "4f01265f-1ff6-5095-a8c7-11c1dd5e4a63",
+          "name": "Admin: Delete User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/admin/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "admin",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Deletes a user. Uses `{{resourceId}}`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "71d03f93-ebc3-592b-aac7-1f87211a771b",
+      "name": "Clients",
+      "description": "CRUD for clients. Requires JWT. The access-token endpoint additionally requires the `ADMIN` role (`RolesGuard`).",
+      "item": [
+        {
+          "id": "eb014c70-7adb-53fd-a46a-8bf920112859",
+          "name": "Create Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "const id = json.id || json._id || (json.data && (json.data.id || json.data._id));",
+                  "if (id) { pm.collectionVariables.set('clientId', id); console.log('clientId saved:', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Coffee\",\n  \"email\": \"owner@acmecoffee.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients"
+              ]
+            },
+            "description": "Creates a client.\n\n**Body:** `CreateClientDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "07f98578-b960-518a-a6ec-ea69a0b50fb2",
+          "name": "List Clients",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Free-text search",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists clients.\n\n**Query:** `QueryClientDto`"
+          },
+          "response": []
+        },
+        {
+          "id": "92e90749-23e4-5efe-a6e6-ab10ee107dd9",
+          "name": "Get Client By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Fetches a client. Uses `{{resourceId}}` (set it to a client id, or copy from `clientId`)."
+          },
+          "response": []
+        },
+        {
+          "id": "c9570f28-ccde-5bdd-a84d-304d60121b72",
+          "name": "Update Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Coffee Roasters\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Partially updates a client.\n\n**Body:** `UpdateClientDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "f58c240f-26dc-5021-aed1-0a97f0a6da86",
+          "name": "Delete Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Deletes a client."
+          },
+          "response": []
+        },
+        {
+          "id": "47b80af9-e32d-5b43-acf2-7f08900793b9",
+          "name": "Set Client Access Token (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"EAAG...page-access-token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id/access-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id",
+                "access-token"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Stores the client's access token (e.g. a Meta page/Instagram token).\n\n**Requires:** `ADMIN` role (returns 403 otherwise).\n\n**Body:** `{ \"token\": string }`"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "ac9f7a40-3fa1-5fd5-a78b-289da9529344",
+      "name": "Business Info",
+      "description": "Business info attached to a client. Requires JWT. All routes are scoped by `clientId` (one record per client).\n\nThe controller has a TODO to move these under `/clients/:clientId/business-info`.",
+      "item": [
+        {
+          "id": "ba52d754-32e6-53af-a38a-f34bd25f7c52",
+          "name": "Create Business Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"Acme Coffee\",\n  \"description\": \"Specialty coffee roaster\",\n  \"phone\": \"+201000000000\",\n  \"address\": \"12 Nile St, Giza\",\n  \"workingHours\": \"Sat-Thu 8am-10pm\",\n  \"website\": \"https://acmecoffee.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/business-info/client/:clientId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-info",
+                "client",
+                ":clientId"
+              ],
+              "variable": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}"
+                }
+              ]
+            },
+            "description": "Creates business info for a client. The controller merges the path `clientId` into the DTO.\n\n**Body:** `CreateBusinessInfoDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "1c3ed610-b613-591c-a131-91812f8fffa8",
+          "name": "Get Business Info By Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/business-info/client/:clientId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-info",
+                "client",
+                ":clientId"
+              ],
+              "variable": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}"
+                }
+              ]
+            },
+            "description": "Fetches the business info of a client."
+          },
+          "response": []
+        },
+        {
+          "id": "d776e132-9707-5171-a3e7-0f2ef6783985",
+          "name": "Update Business Info By Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"Acme Coffee Roasters\",\n  \"description\": \"Specialty coffee roaster\",\n  \"phone\": \"+201000000000\",\n  \"address\": \"12 Nile St, Giza\",\n  \"workingHours\": \"Daily 8am-11pm\",\n  \"website\": \"https://acmecoffee.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/business-info/client/:clientId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-info",
+                "client",
+                ":clientId"
+              ],
+              "variable": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}"
+                }
+              ]
+            },
+            "description": "Replaces/updates the business info of a client. Note: this endpoint reuses `CreateBusinessInfoDto`, so send the full object.\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "a90c29f2-c593-5ad7-a532-6b6c456164e7",
+          "name": "Delete Business Info By Client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/business-info/client/:clientId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "business-info",
+                "client",
+                ":clientId"
+              ],
+              "variable": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}"
+                }
+              ]
+            },
+            "description": "Deletes the business info of a client."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "f3f16c13-f104-5e77-aff3-b3e92890978d",
+      "name": "Offers",
+      "description": "CRUD for offers. Requires JWT.",
+      "item": [
+        {
+          "id": "2cb00396-1726-5156-ac66-ac79be25b4e4",
+          "name": "Create Offer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "const id = json.id || json._id || (json.data && (json.data.id || json.data._id));",
+                  "if (id) { pm.collectionVariables.set('offerId', id); console.log('offerId saved:', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"title\": \"Weekend Special\",\n  \"description\": \"20% off all drinks\",\n  \"price\": 99.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/offers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "offers"
+              ]
+            },
+            "description": "Creates an offer.\n\n**Body:** `CreateOfferDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "ffae0a08-bede-514f-aed5-083c4da4705c",
+          "name": "List Offers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/offers?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "offers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}",
+                  "description": "Filter by client",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists offers.\n\n**Query:** `QueryOfferDto`"
+          },
+          "response": []
+        },
+        {
+          "id": "82c5ecc4-765f-5240-acfc-dd4008615d8f",
+          "name": "Get Offer By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/offers/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "offers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Fetches an offer. Uses `{{resourceId}}` (copy from `offerId`)."
+          },
+          "response": []
+        },
+        {
+          "id": "37432480-66d0-5324-afbb-7e45eb8fa2bd",
+          "name": "Update Offer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Weekend Special (Extended)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/offers/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "offers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Partially updates an offer.\n\n**Body:** `UpdateOfferDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "5bf2ea37-c2e9-5a5f-acdc-e9478105c46b",
+          "name": "Delete Offer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/offers/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "offers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Deletes an offer."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "11f1f57a-d46d-5535-af5c-7bafb0bc9685",
+      "name": "Services",
+      "description": "CRUD for services. Requires JWT. Note: updates use **PUT** (not PATCH) on this resource.",
+      "item": [
+        {
+          "id": "5d1c9f9d-771c-5f28-a566-b88c8847c73b",
+          "name": "Create Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "const id = json.id || json._id || (json.data && (json.data.id || json.data._id));",
+                  "if (id) { pm.collectionVariables.set('serviceId', id); console.log('serviceId saved:', id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"name\": \"Catering\",\n  \"description\": \"Event catering\",\n  \"price\": 250\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ]
+            },
+            "description": "Creates a service.\n\n**Body:** `CreateServiceDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "6ab0ea99-b5eb-583e-a042-02131b793615",
+          "name": "List Services",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Page size"
+                },
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}",
+                  "description": "Filter by client",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists services.\n\n**Query:** `QueryServiceDto`"
+          },
+          "response": []
+        },
+        {
+          "id": "41880832-3b3b-5b4c-a88c-98bdaafa2e75",
+          "name": "Get Service By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Fetches a service. Uses `{{resourceId}}` (copy from `serviceId`)."
+          },
+          "response": []
+        },
+        {
+          "id": "4ad56073-11c7-5bac-ae9e-79a2e0e6d63c",
+          "name": "Update Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium Catering\",\n  \"price\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Updates a service.\n\n**Body:** `UpdateServiceDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "658f9d92-d07c-5a9f-a6e5-ec22ecac4406",
+          "name": "Delete Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Deletes a service."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "7b77e1a6-266f-59ff-ab79-2d6ddc1d99bf",
+      "name": "n8n Callback",
+      "description": "Server-to-server callback invoked by the n8n workflow after the AI reply is generated. **No JWT.** Authenticated by the `x-webhook-secret` header, which must equal the `N8N_WEBHOOK_SECRET` env var.\n\nThe server looks up the pending request by `id` (`N8nDeliveryService.take`). If the id is unknown/duplicate/expired the response is `{ acknowledged: false }`. Replies are sent asynchronously (fire-and-forget).",
+      "item": [
+        {
+          "id": "3151bb72-4e04-55d1-a5cd-7c2ac9936f31",
+          "name": "Callback: DM Batch Reply",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "{{n8nWebhookSecret}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"pending-request-id\",\n  \"text\": \"Hi! We're open daily from 8am to 11pm.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "callback"
+              ]
+            },
+            "description": "Used when the pending request is of kind `batch` (direct messages). Only `id` and `text` are used. Empty/blank `text` sends nothing.\n\n**Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `400` missing id | `401` bad secret"
+          },
+          "response": []
+        },
+        {
+          "id": "9e087371-45a8-551c-ab75-e1ec88604519",
+          "name": "Callback: Comment Reply (engagement)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "{{n8nWebhookSecret}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"pending-request-id\",\n  \"type\": \"engagement\",\n  \"publicReply\": \"Thanks for the love! \\u2764\\ufe0f\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "callback"
+              ]
+            },
+            "description": "Used when the pending request is a comment. `type` must be `engagement` or `question` (defaults to `engagement`).\n\nFor `engagement`, typically `publicReply` is used."
+          },
+          "response": []
+        },
+        {
+          "id": "c5accd26-8e6c-59f0-a1a0-be552c7a39d5",
+          "name": "Callback: Comment Reply (question)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "{{n8nWebhookSecret}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"pending-request-id\",\n  \"type\": \"question\",\n  \"dmText\": \"Our opening hours are 8am-11pm daily.\",\n  \"publicReplyIfDmSent\": \"Sent you a DM with the details!\",\n  \"publicReplyIfDmClosed\": \"Please message us directly and we'll help right away.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "callback"
+              ]
+            },
+            "description": "For `question` comments: send a DM and a public reply that depends on whether the DM could be delivered.\n\n- `dmText`: private message text\n- `publicReplyIfDmSent`: public reply if the DM was sent\n- `publicReplyIfDmClosed`: public reply if the DM window is closed"
+          },
+          "response": []
+        },
+        {
+          "id": "af2df0ef-ee28-560a-a856-2bdf95e86aaf",
+          "name": "Callback: Invalid secret (expect 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [401]', () => pm.expect([401]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "wrong",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"x\",\n  \"text\": \"hi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/callback",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "callback"
+              ]
+            },
+            "description": "Negative test: wrong secret returns 401."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "b779d894-bb92-50cc-aa82-da10ede8c5f0",
+      "name": "Inbox",
+      "description": "Inbox operations. Requires JWT with the `ADMIN` role (`RolesGuard`).",
+      "item": [
+        {
+          "id": "17906db0-8351-5b0a-a89a-9e9e9fb03813",
+          "name": "Backfill Unanswered Comments (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', () => pm.response.to.have.status(202));",
+                  "pm.test('Returns the pending count', () => pm.expect(pm.response.json()).to.have.property('pending'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{pageId}}\",\n  \"postId\": \"{{pageId}}_100000000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/inbox/comments/backfill",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inbox",
+                "comments",
+                "backfill"
+              ]
+            },
+            "description": "Replies to the comments on a post that the page never answered (replaces the Telegram \"reply to old comments\" n8n workflow).\n\nFetches the post's top-level comments, keeps the ones that are not from the page, not hidden and have no reply from the page, then feeds them newest first into the inbox, one every `COMMENT_BACKFILL_DELAY_MS` (default 5000). Each one goes through the normal comment flow: classifier, Gemini if unsure, then reply / DM / like / hide.\n\n**Requires:** `ADMIN` role (returns 403 otherwise).\n\n**Body:** `{ \"accountId\": string, \"postId\": string }`\n- `accountId`: Facebook Page ID or Instagram account ID. The platform is taken from the client that owns it.\n- `postId`: Facebook post ID (`{pageId}_{postId}`) or Instagram media ID.\n\n**Responses:**\n- `202` `{ platform, postId, total, pending, delaySeconds }`: the run continues in the background.\n- `404` no client owns `accountId`; `400` the client has no access token; `409` a run is already in progress for this post.\n- Meta errors (`details` has Meta's `graphCode` / `graphSubcode`):\n  - `404 META_POST_NOT_FOUND`: the post isn't on this page or the token can't see it. Use the `post_id` from a comment webhook.\n  - `400 META_TOKEN_INVALID`: the client's token is expired or revoked.\n  - `400 META_PERMISSION_DENIED`: the token is missing a permission.\n  - `503 META_UNAVAILABLE`: Meta is down; try again later.\n  - `502 META_ERROR`: any other Meta rejection."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "e3a4c1a0-faec-55a6-a17e-eacf92405abf",
+      "name": "Meta Webhooks",
+      "description": "Webhook endpoint for Meta (Facebook Pages + Instagram). **No JWT.**\n\n- `GET` is the subscription verification handshake.\n- `POST` receives events and is verified via `x-hub-signature-256` (HMAC-SHA256 of the **raw body** with the app secret). The requests below compute the signature automatically in a pre-request script using the `metaAppSecret` variable.\n\nEvents are processed asynchronously; the endpoint always answers `200 {received:true}` once the signature is valid.",
+      "item": [
+        {
+          "id": "0f52a1b0-3a00-54b7-a1af-20b95804ec8f",
+          "name": "Verify Webhook (GET)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "pm.test('Challenge echoed', () => pm.expect(pm.response.text()).to.eql('1234567890'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta?hub.mode=subscribe&hub.verify_token={{metaVerifyToken}}&hub.challenge=1234567890",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe",
+                  "description": "Always `subscribe`"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "{{metaVerifyToken}}",
+                  "description": "Must match the server's verify token"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "1234567890",
+                  "description": "Echoed back on success"
+                }
+              ]
+            },
+            "description": "Meta's verification challenge. Returns `hub.challenge` as plain text if `hub.verify_token` matches the server's configured token."
+          },
+          "response": []
+        },
+        {
+          "id": "2cd030e6-87d2-5e2a-abef-c5962858247e",
+          "name": "Receive Event: Facebook Page (POST)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Computes X-Hub-Signature-256 = 'sha256=' + HMAC_SHA256(rawBody, metaAppSecret)",
+                  "const secret = pm.collectionVariables.get('metaAppSecret');",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const sig = CryptoJS.HmacSHA256(raw, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"page\",\n  \"entry\": [\n    {\n      \"id\": \"{{pageId}}\",\n      \"time\": 1730000000000,\n      \"messaging\": [\n        {\n          \"sender\": {\n            \"id\": \"1234567890\"\n          },\n          \"recipient\": {\n            \"id\": \"{{pageId}}\"\n          },\n          \"timestamp\": 1730000000000,\n          \"message\": {\n            \"mid\": \"m_abc123\",\n            \"text\": \"What are your opening hours?\"\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Simulates a Facebook Page event (`object: page`) routed to `MetaWebhookService.handleEvent`. Example: an incoming Messenger message."
+          },
+          "response": []
+        },
+        {
+          "id": "39a8241d-48ed-5480-ae46-55165c3eaf5c",
+          "name": "Receive Event: Facebook Page Comment (POST)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Computes X-Hub-Signature-256 = 'sha256=' + HMAC_SHA256(rawBody, metaAppSecret)",
+                  "const secret = pm.collectionVariables.get('metaAppSecret');",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const sig = CryptoJS.HmacSHA256(raw, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"page\",\n  \"entry\": [\n    {\n      \"id\": \"{{pageId}}\",\n      \"time\": 1730000000,\n      \"changes\": [\n        {\n          \"field\": \"feed\",\n          \"value\": {\n            \"item\": \"comment\",\n            \"verb\": \"add\",\n            \"comment_id\": \"{{pageId}}_c1\",\n            \"post_id\": \"{{pageId}}_p1\",\n            \"from\": {\n              \"id\": \"1234567890\",\n              \"name\": \"Test User\"\n            },\n            \"message\": \"Do you deliver?\",\n            \"created_time\": 1730000000\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Simulates a Facebook Page feed comment event (`object: page`, `changes` with `field: feed`)."
+          },
+          "response": []
+        },
+        {
+          "id": "f92f89d4-8133-5599-a775-ca7a8d813d2b",
+          "name": "Receive Event: Instagram DM (POST)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Computes X-Hub-Signature-256 = 'sha256=' + HMAC_SHA256(rawBody, metaAppSecret)",
+                  "const secret = pm.collectionVariables.get('metaAppSecret');",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const sig = CryptoJS.HmacSHA256(raw, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"instagram\",\n  \"entry\": [\n    {\n      \"id\": \"{{igAccountId}}\",\n      \"time\": 1730000000,\n      \"messaging\": [\n        {\n          \"sender\": {\n            \"id\": \"1234567890\"\n          },\n          \"recipient\": {\n            \"id\": \"{{igAccountId}}\"\n          },\n          \"timestamp\": 1730000000000,\n          \"message\": {\n            \"mid\": \"ig_m_abc123\",\n            \"text\": \"Hi, do you have this in stock?\"\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Simulates an Instagram event (`object: instagram`) routed to `InstagramWebhookService.handleEvent`."
+          },
+          "response": []
+        },
+        {
+          "id": "1d971744-e51c-540c-a753-3e9a77b81a16",
+          "name": "Receive Event: Instagram Comment (POST)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Computes X-Hub-Signature-256 = 'sha256=' + HMAC_SHA256(rawBody, metaAppSecret)",
+                  "const secret = pm.collectionVariables.get('metaAppSecret');",
+                  "const raw = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const sig = CryptoJS.HmacSHA256(raw, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + sig });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"instagram\",\n  \"entry\": [\n    {\n      \"id\": \"{{igAccountId}}\",\n      \"time\": 1730000000,\n      \"changes\": [\n        {\n          \"field\": \"comments\",\n          \"value\": {\n            \"id\": \"17900000000000001\",\n            \"text\": \"Love this! How much is it?\",\n            \"from\": {\n              \"id\": \"1234567890\",\n              \"username\": \"test_user\"\n            },\n            \"media\": {\n              \"id\": \"17800000000000001\",\n              \"media_product_type\": \"FEED\"\n            }\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Simulates an Instagram comment event (`changes` with `field: comments`)."
+          },
+          "response": []
+        },
+        {
+          "id": "a8b017e0-5dae-5f30-a167-5d97d1c45f48",
+          "name": "Receive Event: Invalid signature (expect 401/403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rejected', () => pm.expect(pm.response.code).to.be.oneOf([400, 401, 403]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-hub-signature-256",
+                "value": "sha256=invalid",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"page\",\n  \"entry\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "meta"
+              ]
+            },
+            "description": "Negative test: sends a wrong signature. The exact status depends on `MetaWebhookService.verifySignature` (typically 401/403)."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "jane@example.com",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "offerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "resourceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "n8nWebhookSecret",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "metaVerifyToken",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "metaAppSecret",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "pageId",
+      "value": "100000000000000",
+      "type": "string"
+    },
+    {
+      "key": "igAccountId",
+      "value": "17840000000000000",
+      "type": "string"
+    }
+  ]
+}

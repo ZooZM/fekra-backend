@@ -7,7 +7,12 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Redis } from 'ioredis';
-import { COMMENT_QUEUE_KEY, MESSAGE_QUEUE_KEY, REDIS } from './inbox.constants';
+import {
+  COMMENT_QUEUE_KEY,
+  COMMENT_RETRY_KEY,
+  MESSAGE_QUEUE_KEY,
+  REDIS,
+} from './inbox.constants';
 import { InboxAttachment, InboxItem } from './inbox.types';
 import { DmBufferService } from './dm-buffer.service';
 import { N8nDeliveryService } from './n8n-delivery.service';
@@ -15,6 +20,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientsService } from '@app/clients/clients.service';
 import { AttachmentHandlerService } from './attachment-handler.service';
 import { CommentClassifierService } from './comment-classifier.service';
+import { CommentLlmClassifierService } from './comment-llm-classifier.service';
 import { CommentReplyService } from './comment-reply.service';
 
 @Injectable()
@@ -30,6 +36,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly clientsService: ClientsService,
     private readonly attachments: AttachmentHandlerService,
     private readonly commentClassifier: CommentClassifierService,
+    private readonly commentLlmClassifier: CommentLlmClassifierService,
     private readonly commentReply: CommentReplyService,
   ) {}
 
@@ -38,16 +45,23 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
-  /** Never throws, so callers can use `void inbox.push(...)`. */
-  async push(item: InboxItem): Promise<void> {
+  /**
+   * Never throws, so callers can use `void inbox.push(...)`.
+   * Resolves to true if the item was queued, false if it was dropped (duplicate, blocked, rate limited, error).
+   * `skipRateLimit` is for items the caller already paces (e.g. the comment backfill).
+   */
+  async push(
+    item: InboxItem,
+    opts: { skipRateLimit?: boolean } = {},
+  ): Promise<boolean> {
     const seenKey = `inbox:seen:${item.kind}:${item.platform}:${item.id}`;
     try {
       // Meta redeliveries of the same event are dropped here
       const fresh = await this.redis.set(seenKey, '1', 'EX', 3600, 'NX');
-      if (!fresh) return;
+      if (!fresh) return false;
 
       // Checked after the dedupe, so redeliveries don't use up a sender's allowance
-      if (!(await this.allowed(item))) return;
+      if (!(await this.allowed(item, opts.skipRateLimit))) return false;
 
       const key =
         item.kind === 'comment' ? COMMENT_QUEUE_KEY : MESSAGE_QUEUE_KEY;
@@ -57,15 +71,20 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
         await this.redis.del(seenKey).catch(() => undefined);
         throw err;
       }
+      return true;
     } catch (err) {
       this.logger.error(
         `Failed to enqueue ${item.kind} ${item.id}: ${(err as Error).message}`,
       );
+      return false;
     }
   }
 
   /** Blocklist + fixed-window rate limit per sender. */
-  private async allowed(item: InboxItem): Promise<boolean> {
+  private async allowed(
+    item: InboxItem,
+    skipRateLimit = false,
+  ): Promise<boolean> {
     // Batches are already aggregated from messages that were counted individually
     if (item.kind === 'batch' || !item.senderId) return true;
 
@@ -77,6 +96,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
       );
       return false;
     }
+    if (skipRateLimit) return true;
 
     const limit =
       item.kind === 'comment'
@@ -133,7 +153,52 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     return items;
   }
 
+  /**
+   * Parks a comment whose LLM call failed, to try again later instead of guessing.
+   * Returns false when it's out of attempts, so the caller applies the fallback.
+   */
+  private async scheduleLlmRetry(
+    item: Extract<InboxItem, { kind: 'comment' }>,
+    reason: string,
+  ): Promise<boolean> {
+    const failed = (item.llmAttempts ?? 0) + 1;
+    const max = this.num('COMMENT_LLM_MAX_ATTEMPTS', 3);
+    if (failed >= max) return false;
+
+    // 5 min, then 10 min... long enough for an outage or a billing top-up
+    const delay = this.num('COMMENT_LLM_RETRY_DELAY_MS', 300_000) * failed;
+    await this.redis.zadd(
+      COMMENT_RETRY_KEY,
+      Date.now() + delay,
+      JSON.stringify({ ...item, llmAttempts: failed }),
+    );
+    this.logger.warn(
+      `Comment ${item.id}: ${reason}, retrying in ${Math.round(delay / 1000)}s (attempt ${failed + 1}/${max})`,
+    );
+    return true;
+  }
+
+  /**
+   * Moves comments whose LLM retry is due back into the comment queue.
+   * One Lua script, so it's atomic: nothing is lost on a crash and two instances never move the same item.
+   */
+  private async promoteDueRetries() {
+    await this.redis.eval(
+      `local due = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, 100)
+       for _, m in ipairs(due) do
+         redis.call('ZREM', KEYS[1], m)
+         redis.call('ZADD', KEYS[2], cjson.decode(m).timestamp, m)
+       end
+       return #due`,
+      2,
+      COMMENT_RETRY_KEY,
+      COMMENT_QUEUE_KEY,
+      Date.now(),
+    );
+  }
+
   private async tick() {
+    await this.promoteDueRetries();
     const max = this.num('DISPATCH_BATCH', 5);
     const reserved = Math.min(this.num('DISPATCH_COMMENT_RESERVED', 1), max);
 
@@ -192,25 +257,38 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
-        const { type, reason } = this.commentClassifier.classify(item.text);
-        this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
-
-        if (type === 'engagement') {
-          // handled entirely in Nest: random canned reply + like, no n8n and no LLM cost
-          await this.commentReply.handleEngagement({
-            ...item,
-            clientId: client.id,
-            client,
-          });
+        const { enabled, likes_enabled } = client.commentReplyConfig;
+        if (!enabled && !likes_enabled) {
+          // nothing would happen anyway, so don't spend an LLM call on it
+          this.logger.debug(
+            `Comment automation is off for client ${client.id}, skipping ${item.id}`,
+          );
           return;
         }
 
-        // TODO: if the comment is classified as 'inquiry' or 'unsure', send it to a small LLM to decide in one word ("inquiry" or "engagement")
-        await this.delivery.send(`${item.platform}-comment-${item.id}`, {
-          ...item,
-          client,
-          commentTypeHint: type, // 'inquiry' or 'unsure': n8n confirms or corrects it
-        });
+        // 1) free keyword rules; 2) only if they can't decide, ask the LLM
+        let { type, reason, retryable } = this.commentClassifier.classify(
+          item.text,
+        );
+        if (type === 'unsure') {
+          ({ type, reason, retryable } =
+            await this.commentLlmClassifier.classify(item.text, client));
+        }
+
+        // 'unsure' now means the LLM call itself failed
+        if (type === 'unsure') {
+          if (retryable && (await this.scheduleLlmRetry(item, reason))) return;
+          // the prompt's fallback rule: ambiguous -> spam (like only, never a reply)
+          type = 'spam';
+          reason = `${reason}, fallback to spam`;
+        }
+        this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
+ 
+        // reply / DM / like / hide, handled entirely in Nest (no n8n for comments)
+        await this.commentReply.handle(
+          { ...item, clientId: client.id, client },
+          type,
+        );
         break;
       }
       case 'batch': {

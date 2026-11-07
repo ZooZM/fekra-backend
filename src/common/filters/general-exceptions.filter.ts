@@ -161,8 +161,12 @@ export class GeneralExceptionsFilter implements ExceptionFilter {
           errorCode: 'VALIDATION_ERROR',
         };
 
-      // Inconsistent column data (e.g. a malformed UUID in a where clause)
+      // A value the column can't hold, e.g. a Facebook page id where a UUID is expected.
+      // P2023 with the classic engine; the pg driver adapter reports Postgres'
+      // "invalid input syntax" as P2007 and out-of-range numbers as P2020.
       case 'P2023':
+      case 'P2007':
+      case 'P2020':
         return {
           statusCode: HttpStatus.BAD_REQUEST,
           message: 'Invalid value',

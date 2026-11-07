@@ -1,8 +1,14 @@
 // inbox/comment-reply.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ClientsService } from '@app/clients/clients.service';
+import {
+  CommentReplyConfig,
+  DmReplyConfig,
+} from '@common/zod/json-columns.schema';
 import { GraphApiService, SendableRequest } from './graph-api.service';
+import { CommentCategory } from './comment-classifier.service';
 
+/** Shape of the replies n8n sends back through the callback. */
 export type CommentType = 'engagement' | 'question';
 
 export interface CommentReplyInput {
@@ -11,6 +17,48 @@ export interface CommentReplyInput {
   dmText?: string; // question
   publicReplyIfDmSent?: string; // question, DM went through
   publicReplyIfDmClosed?: string; // question, DM failed
+}
+
+// Defaults copied from the n8n workflow. Used only when the client's own list is empty.
+// Several variants so Facebook doesn't flag identical replies as spam.
+const DEFAULT_INQUIRY_CAN_DM = [
+  'تم الرد في رسالة خاصة يا فندم 📩',
+  'بعتلك كل التفاصيل في رسالة، شيك على الانبوكس ✨',
+  'وصلت لحضرتك رسالة بالتفاصيل حالاً 📨',
+  'تم التواصل على الخاص يا فندم 🌹',
+  'التفاصيل في الانبوكس عند حضرتك 📥',
+];
+const DEFAULT_INQUIRY_CAN_NOT_DM = [
+  'أهلاً بك يا فندم 👋، عشان نقدر نبعتلك التفاصيل كاملة، يا ريت تبعتلنا رسالة على الصفحة 📩.',
+  'منورنا ✨.. حاولنا نتواصل مع حضرتك خاص بس الرسايل مقفولة، ممكن تبعتلنا رسالة عشان نرد عليك؟',
+  'يا ريت تتواصل معانا عبر رسايل الصفحة عشان نقدر نفيدك بالتفاصيل والأسعار فوراً 📨.',
+  'التفاصيل كلها متاحة يا فندم، ابعتلنا رسالة وهنرد عليك حالاً 👇📩',
+  'أهلاً بحضرتك 🌹، يرجى مراسلتنا على الخاص لتزويدك بكل التفاصيل المطلوبة.',
+];
+const DEFAULT_ENGAGEMENT = [
+  'نورتنا يا فندم، شكراً لذوقك ❤️',
+  'الله يبارك في حضرتك، كلك ذوق ✨',
+  'مرورك الأجمل يا فندم 🌹',
+  'شكراً لتشجيعك الدائم لينا، نورت الصفحة 🙏',
+  'أهلاً بحضرتك، دايماً منورنا ✨',
+  '❤️❤️❤️❤️',
+  'تسلم يا غالي، شكراً لمحبتك 🌹',
+];
+
+/** Random item, so repeated replies don't look automated. */
+const pick = (list: readonly string[]): string | undefined =>
+  list.length ? list[Math.floor(Math.random() * list.length)] : undefined;
+
+/** Random item from the client's list, or from the defaults if it's empty. */
+const pickOr = (list: readonly string[], defaults: readonly string[]) =>
+  pick(list.length ? list : defaults);
+
+interface CommentContext {
+  req: SendableRequest;
+  base: string;
+  token: string;
+  config: CommentReplyConfig;
+  dm: DmReplyConfig;
 }
 
 @Injectable()
@@ -22,53 +70,112 @@ export class CommentReplyService {
     private readonly clients: ClientsService,
   ) {}
 
-  async handleEngagement(req: SendableRequest): Promise<void> {
-    let reply;
+  /**
+   * Runs the action for the comment's category (same steps as the n8n workflows):
+   * - inquiry:            private DM -> public reply (DM sent / DMs closed) -> like
+   * - engagement:         public thank-you reply -> like
+   * - spam:               like only (nothing on Instagram, it has no comment likes)
+   * - complaint / insult: hide the comment (the author and their friends still see it)
+   *
+   * `commentReplyConfig.enabled` gates every reply and hide, `likes_enabled` gates likes,
+   * and `dmReplyConfig.enabled` gates the private DM.
+   * Never throws, so callers can use `void commentReply.handle(...)`.
+   */
+  async handle(req: SendableRequest, category: CommentCategory): Promise<void> {
     try {
-      const token = await this.clients.getAccessToken(req.clientId);
-      if (!token) throw new Error('No access token stored for this client');
-      const base = this.graph.host(req.platform);
-      const engagementReplies = req.client!.commentReplyConfig.engagement;
-
-      const randomIndex = Math.floor(Math.random() * engagementReplies.length);
-
-      reply = engagementReplies[randomIndex];
-
-      await this.like(req, base, token);
-
-      if (reply) {
-        await this.publicReply(req, base, token, reply);
+      const ctx = await this.context(req);
+      switch (category) {
+        case 'inquiry':
+          return await this.handleInquiry(ctx);
+        case 'engagement':
+          return await this.handleEngagement(ctx);
+        case 'spam':
+          return await this.handleSpam(ctx);
+        case 'complaint':
+        case 'insult':
+          return await this.handleHide(ctx, category);
       }
     } catch (err) {
       this.logger.error(
-        `Comment handling failed for ${req.id}: ${(err as Error).message}`,
+        `Comment ${category} handling failed for ${req.id}: ${(err as Error).message}`,
       );
       await this.graph.deadLetter({
         service: 'comment',
         request: req,
-        input: { type: 'engagement', reply },
+        input: { category },
         error: (err as Error).message,
       });
     }
   }
 
-  /** Never throws, so callers can use `void commentReply.handle(...)`. */
-  async handle(req: SendableRequest, input: CommentReplyInput): Promise<void> {
+  /** Private DM, then a public reply that depends on whether the DM went through, then like. */
+  private async handleInquiry(ctx: CommentContext) {
     try {
-      const token = await this.clients.getAccessToken(req.clientId);
-      if (!token) throw new Error('No access token stored for this client');
-      const base = this.graph.host(req.platform);
+      if (!ctx.config.enabled) return;
 
-      await this.like(req, base, token); // both types, failure never blocks the reply
+      const dmText = ctx.dm.enabled ? pick(ctx.dm.replies) : undefined;
+      const dmSent = await this.tryPrivateDm(ctx, dmText);
 
-      if (input.type === 'question') {
-        const dmSent = await this.tryPrivateDm(req, base, token, input.dmText);
-        const text = dmSent
-          ? input.publicReplyIfDmSent
-          : input.publicReplyIfDmClosed;
-        if (text) await this.publicReply(req, base, token, text);
-      } else if (input.publicReply) {
-        await this.publicReply(req, base, token, input.publicReply);
+      const reply = dmSent
+        ? pickOr(ctx.config.inquiry_can_dm, DEFAULT_INQUIRY_CAN_DM)
+        : pickOr(ctx.config.inquiry_can_not_dm, DEFAULT_INQUIRY_CAN_NOT_DM);
+      if (reply) await this.publicReply(ctx, reply);
+    } finally {
+      await this.like(ctx); // like even if the reply failed
+    }
+  }
+
+  /** Random thank-you reply, then like. */
+  private async handleEngagement(ctx: CommentContext) {
+    try {
+      if (!ctx.config.enabled) return;
+      const reply = pickOr(ctx.config.engagement, DEFAULT_ENGAGEMENT);
+      if (reply) await this.publicReply(ctx, reply);
+    } finally {
+      await this.like(ctx);
+    }
+  }
+
+  /** Same as the n8n workflow: like only, never reply to spam. */
+  private async handleSpam(ctx: CommentContext) {
+    await this.like(ctx);
+  }
+
+  /**
+   * Hidden, not deleted: reversible, and the author still sees their comment,
+   * so they don't notice it was moderated.
+   * Facebook: POST /{comment-id} is_hidden=true. Instagram: POST /{ig-comment-id} hide=true.
+   */
+  private async handleHide(
+    { req, base, token, config }: CommentContext,
+    category: 'complaint' | 'insult',
+  ) {
+    if (!config.enabled) return;
+    const body =
+      req.platform === 'instagram' ? { hide: true } : { is_hidden: true };
+    await this.graph.post(`${base}/${req.id}`, body, token);
+    this.logger.log(`Hid ${category} comment ${req.id} (${req.platform})`);
+  }
+
+  /** Applies replies written by n8n (used only for comments sent there). Never throws. */
+  async handleN8nReply(
+    req: SendableRequest,
+    input: CommentReplyInput,
+  ): Promise<void> {
+    try {
+      const ctx = await this.context(req);
+      try {
+        if (input.type === 'question') {
+          const dmSent = await this.tryPrivateDm(ctx, input.dmText);
+          const text = dmSent
+            ? input.publicReplyIfDmSent
+            : input.publicReplyIfDmClosed;
+          if (text) await this.publicReply(ctx, text);
+        } else if (input.publicReply) {
+          await this.publicReply(ctx, input.publicReply);
+        }
+      } finally {
+        await this.like(ctx);
       }
     } catch (err) {
       this.logger.error(
@@ -83,8 +190,27 @@ export class CommentReplyService {
     }
   }
 
-  private async like(req: SendableRequest, base: string, token: string) {
-    // As far as I know the Instagram API has no endpoint for liking comments, so it's Facebook only
+  /**
+   * Both platforms use graph.facebook.com with the Page token, like the n8n workflows
+   * (Instagram API with Facebook Login, not graph.instagram.com).
+   */
+  private async context(req: SendableRequest): Promise<CommentContext> {
+    if (!req.client) throw new Error('client is missing');
+    const token = await this.clients.getAccessToken(req.clientId);
+    if (!token) throw new Error('No access token stored for this client');
+    return {
+      req,
+      base: this.graph.host('facebook'),
+      token,
+      config: req.client.commentReplyConfig,
+      dm: req.client.dmReplyConfig,
+    };
+  }
+
+  /** Never throws: a failed like must not block anything else. */
+  private async like({ req, base, token, config }: CommentContext) {
+    if (!config.likes_enabled) return;
+    // The Instagram API has no endpoint for liking comments, so it's Facebook only
     if (req.platform !== 'facebook') return;
     try {
       await this.graph.post(`${base}/${req.id}/likes`, {}, token);
@@ -93,17 +219,20 @@ export class CommentReplyService {
     }
   }
 
-  /** True only if the DM was actually sent. A failure here is expected (closed DMs). */
+  /**
+   * Private reply to the commenter. True only if the DM was actually sent.
+   * A failure here is expected (closed DMs, or the 7-day private reply window passed).
+   * Facebook: POST /{page-id}/messages. Instagram: POST /me/messages (the Page behind the IG account).
+   */
   private async tryPrivateDm(
-    req: SendableRequest,
-    base: string,
-    token: string,
+    { req, base, token }: CommentContext,
     text?: string,
   ) {
     if (!text) return false;
+    const sender = req.platform === 'instagram' ? 'me' : req.accountId;
     try {
       await this.graph.post(
-        `${base}/${req.accountId}/messages`,
+        `${base}/${sender}/messages`,
         {
           recipient: { comment_id: req.id },
           message: { text: text.slice(0, 2000) },
@@ -119,13 +248,11 @@ export class CommentReplyService {
     }
   }
 
+  /** Facebook: POST /{comment-id}/comments. Instagram: POST /{ig-comment-id}/replies. */
   private async publicReply(
-    req: SendableRequest,
-    base: string,
-    token: string,
+    { req, base, token }: CommentContext,
     text: string,
   ) {
-    // https://graph.facebook.com/v24.0/{{ $('Normalize Data').item.json.reply_id }}/comments
     const edge = req.platform === 'instagram' ? 'replies' : 'comments';
     await this.graph.post(
       `${base}/${req.id}/${edge}`,

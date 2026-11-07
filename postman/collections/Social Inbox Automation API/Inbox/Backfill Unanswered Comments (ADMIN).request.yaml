@@ -1,0 +1,39 @@
+$kind: http-request
+description: |-
+  Replies to the comments on a post that the page never answered (replaces the Telegram "reply to old comments" n8n workflow).
+
+  Fetches the post's top-level comments, keeps the ones that are not from the page, not hidden and have no reply from the page, then feeds them newest first into the inbox, one every `COMMENT_BACKFILL_DELAY_MS` (default 5000). Each one goes through the normal comment flow: classifier, Gemini if unsure, then reply / DM / like / hide.
+
+  **Requires:** `ADMIN` role (returns 403 otherwise).
+
+  **Body:** `{ "accountId": string, "postId": string }`
+  - `accountId`: Facebook Page ID or Instagram account ID. The platform is taken from the client that owns it.
+  - `postId`: Facebook post ID (`{pageId}_{postId}`) or Instagram media ID.
+
+  **Responses:**
+  - `202` `{ platform, postId, total, pending, delaySeconds }`: the run continues in the background.
+  - `404` no client owns `accountId`; `400` the client has no access token; `409` a run is already in progress for this post.
+  - Meta errors (`details` has Meta's `graphCode` / `graphSubcode`):
+    - `404 META_POST_NOT_FOUND`: the post isn't on this page or the token can't see it. Use the `post_id` from a comment webhook.
+    - `400 META_TOKEN_INVALID`: the client's token is expired or revoked.
+    - `400 META_PERMISSION_DENIED`: the token is missing a permission.
+    - `503 META_UNAVAILABLE`: Meta is down; try again later.
+    - `502 META_ERROR`: any other Meta rejection.
+url: "{{baseUrl}}/inbox/comments/backfill"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "accountId": "{{pageId}}",
+      "postId": "{{pageId}}_100000000000001"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 202', () => pm.response.to.have.status(202));
+      pm.test('Returns the pending count', () => pm.expect(pm.response.json()).to.have.property('pending'));
+    language: text/javascript
+order: 1000
