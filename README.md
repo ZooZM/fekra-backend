@@ -96,16 +96,117 @@ only forwards `GET` and `POST` requests.
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Pushes to `main` go to a GCP VM through GitHub Actions. Nothing is built on the VM and nothing
+is deployed that did not pass CI.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```
+git push main ─▶ CI (lint, build, unit + e2e tests, openapi check)
+                  └─ publish: images tagged with the commit SHA → Artifact Registry
+                       └─ Deploy (workflow_run, same SHA, no rebuild)
+                            └─ IAP SSH → deploy/remote-deploy.sh
+                                 migrate → up -d → poll /api/health → roll back on failure
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Production layout
+
+One public origin, served by Caddy (automatic HTTPS). Only Caddy publishes ports.
+
+| Path | Goes to |
+|---|---|
+| `/` | the dashboard (nginx, port 8080), from the `fekra-dashboard` repository |
+| `/api/*` | the API (port 3000), with the `/api` prefix removed |
+
+Redis (and PostgreSQL, unless you use Cloud SQL) run on the same private compose network.
+The files are in [deploy/](deploy/): `compose.yml`, `Caddyfile`, `remote-deploy.sh`.
+
+Change the Caddyfile in this repository and let the deploy copy it: the deploy reloads Caddy in
+place. Do not edit it by hand on the VM with `sed -i` or an editor that saves by renaming the
+file: the container only sees in-place writes, so it would keep serving the old config.
+
+> **Meta webhook URL changes.** Behind the proxy the webhook is
+> `https://<host>/api/webhooks/meta` (it was `https://<host>/webhooks/meta`). Update the
+> callback URL in the Meta app settings when you switch.
+
+### One-time setup
+
+**GCP**
+1. Create an Artifact Registry Docker repository.
+2. Create a service account for deployments with `roles/artifactregistry.writer`,
+   `roles/compute.instanceAdmin.v1`, `roles/iap.tunnelResourceAccessor` and
+   `roles/iam.serviceAccountUser` (on the VM's service account).
+3. Create a Workload Identity pool and an OIDC provider for GitHub. Allow only this
+   repository (`attribute.repository == "<owner>/fekra-backend"`) and let it impersonate the
+   deployment service account. **No JSON keys are created anywhere.**
+4. Allow IAP SSH to the VM: a firewall rule for `35.235.240.0/20` on port 22.
+5. Give the VM's service account `roles/artifactregistry.reader`, then on the VM run
+   `gcloud auth configure-docker <region>-docker.pkg.dev`.
+
+**VM** (Docker with the compose plugin installed)
+```bash
+sudo mkdir -p /opt/fekra/deploy && sudo chown -R "$USER" /opt/fekra
+printf 'DOMAIN=app.example.com\n' > /opt/fekra/deploy/.env      # no secrets in this file
+install -m 600 /dev/null /opt/fekra/.env                          # application secrets, see below
+```
+
+**GitHub** (Settings → Secrets and variables → Actions → Variables; no secrets are needed here)
+
+| Variable | Example |
+|---|---|
+| `GCP_PROJECT_ID`, `GCP_REGION` | `my-project`, `europe-west1` |
+| `GAR_REPOSITORY` | Artifact Registry repository name |
+| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/github/providers/github` |
+| `GCP_SERVICE_ACCOUNT` | `deployer@my-project.iam.gserviceaccount.com` |
+| `VM_NAME`, `VM_ZONE` | `fekra-vm`, `europe-west1-b` |
+
+Create an environment named `production` (Settings → Environments); add required reviewers if
+you want a manual approval before each deploy.
+
+Make `main` a protected branch (Settings → Branches): require a pull request and the **CI /
+test** status check, and block force pushes. Deploy only runs for pushes that passed CI, so the
+protection is what keeps untested code out of production.
+
+### `/opt/fekra/.env`
+
+Mode 600, owned by the deploy user, never committed. Start from `.env.example` and set:
+
+```dotenv
+NODE_ENV=production
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/fekra   # Cloud SQL, or postgres:5432 on the VM
+REDIS_HOST=redis
+JWT_SECRET=<openssl rand -hex 32>
+JWT_EXPIRES_IN=10m
+TOKEN_ENCRYPTION_KEY=<openssl rand -hex 32>               # losing it makes stored tokens unreadable
+APP_ORIGIN=https://app.example.com
+CORS_ORIGINS=                                             # empty: the dashboard is same-origin
+SESSION_COOKIE_PATH=/api/auth                             # the path the browser sees behind Caddy
+OPENAPI_ENABLED=false
+# plus the Meta, Gemini and n8n values from .env.example
+```
+
+### First deploy and later deploys
+
+Run the **CI** workflow on `main` once, then the API deploys by itself. After that, the
+dashboard repository deploys the same way. Each service's last good image is kept in
+`/opt/fekra/RELEASE_<service>`.
+
+### Rollback
+
+A failed deploy rolls itself back: if `GET /api/health` is not OK within 60 seconds, the
+previous image is started again and the workflow fails. To go back to an older release by hand:
+
+```bash
+ssh into the VM (gcloud compute ssh <vm> --tunnel-through-iap)
+bash /opt/fekra/deploy/remote-deploy.sh api <old api image@digest> <old migrate image@digest>
+```
+
+Migrations are additive (new columns and tables; nothing is dropped in the same release that
+stops using it), so the previous API keeps working with the newer schema.
+
+### Running it locally with Docker
+
+`docker compose up -d --build` at the repository root runs PostgreSQL, Redis, the migration and
+the API on `127.0.0.1`. The dashboard's browser tests use `npm run seed:e2e` and
+`npm run start:e2e` against a database whose name contains `e2e`.
 
 ## Resources
 

@@ -1,0 +1,88 @@
+# Local stack: PostgreSQL, Redis, migrations and the API built from this repository.
+#
+#   docker compose up -d --build          # everything; the API listens on http://localhost:3000
+#   docker compose up -d postgres redis   # datastores only, for `npm run start:dev` on the host
+#   docker compose logs -f api
+#   docker compose down                   # stop (add -v to also delete the database and Redis data)
+#
+# The API reads .env.development.local (copy it from .env.example). The database and Redis
+# settings below override that file so the API talks to these containers.
+# To run `npm run start:dev` against the containers instead, set in .env.development.local:
+#   DATABASE_URL=postgresql://fekra:fekra@localhost:5432/fekra
+#   REDIS_HOST=127.0.0.1
+#
+# Ports are published on 127.0.0.1 only. Change them with POSTGRES_HOST_PORT, REDIS_HOST_PORT
+# and API_HOST_PORT (shell variables or a .env file next to this one).
+# Production uses deploy/compose.yml: a pre-built image, Caddy, and no published database ports.
+
+name: fekra
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fekra
+      POSTGRES_PASSWORD: fekra # local-only credentials
+      POSTGRES_DB: fekra
+    ports:
+      - 127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fekra -d fekra]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    # Ex: the inbox relies on key-expiry events (the API also sets this on startup).
+    command: [redis-server, --appendonly, 'yes', --notify-keyspace-events, Ex]
+    ports:
+      - 127.0.0.1:${REDIS_HOST_PORT:-6379}:6379
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-off: applies prisma/migrations (`prisma migrate deploy`) and exits. The API waits for it.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://fekra:fekra@postgres:5432/fekra
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      target: runtime
+    env_file:
+      - path: .env.development.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://fekra:fekra@postgres:5432/fekra
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ''
+      PORT: '3000'
+    ports:
+      - 127.0.0.1:${API_HOST_PORT:-3000}:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

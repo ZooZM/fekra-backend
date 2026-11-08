@@ -8,6 +8,11 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { RolesGuard } from './guards/roles.guard';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtAuthGuard } from './guards/jwt.guard';
+import { SessionService } from './session.service';
+import { LoginThrottleService } from './login-throttle.service';
+import { OriginGuard } from './guards/origin.guard';
+import { SESSIONS_REPOSITORY } from './repositories/ISessionsRepository.repository';
+import { SessionsRepository } from './repositories/sessions.repository.impl';
 
 @Module({
   imports: [
@@ -25,6 +30,10 @@ import { JwtAuthGuard } from './guards/jwt.guard';
   ],
   providers: [
     AuthService,
+    SessionService,
+    LoginThrottleService,
+    OriginGuard,
+    { provide: SESSIONS_REPOSITORY, useClass: SessionsRepository },
     LocalStrategy,
     JwtStrategy,
     JwtAuthGuard,

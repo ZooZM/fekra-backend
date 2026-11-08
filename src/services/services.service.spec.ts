@@ -1,5 +1,4 @@
 import { ServicesService } from './services.service';
-import { SERVICES_REPOSITORY } from './repositories/IServicesRepository.repository';
 import { NotFoundException } from '@nestjs/common';
 
 describe('ServicesService', () => {
@@ -8,7 +7,10 @@ describe('ServicesService', () => {
 
   beforeEach(() => {
     repo = Object.fromEntries(
-      ['create', 'findAll', 'findById', 'update', 'delete'].map((name) => [name, jest.fn()]),
+      ['create', 'findAll', 'findById', 'update', 'delete'].map((name) => [
+        name,
+        jest.fn(),
+      ]),
     );
     service = new ServicesService(repo as never);
   });
@@ -25,13 +27,18 @@ describe('ServicesService', () => {
 
   it('delegates list and delete operations', async () => {
     repo.findAll.mockResolvedValue({ data: [], meta: {} });
-    await expect(service.findAll({} as never)).resolves.toEqual({ data: [], meta: {} });
+    await expect(service.findAll({} as never)).resolves.toEqual({
+      data: [],
+      meta: {},
+    });
     await service.remove('s1');
     expect(repo.delete).toHaveBeenCalledWith('s1');
   });
 
   it('throws when a service is missing', async () => {
     repo.findById.mockResolvedValue(null);
-    await expect(service.findById('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.findById('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

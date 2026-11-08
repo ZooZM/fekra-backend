@@ -13,11 +13,15 @@ import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MetaWebhookModule } from './meta-webhook/meta-webhook.module';
 import { InboxModule } from './inbox/inbox.module';
+import { RedisModule } from './redis/redis.module';
+import { HealthModule } from './health/health.module';
 import { AppZodValidationPipe } from './common/pipes/zod-validation.pipe';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
   try {
+    // loaded only outside production, so the dev module is not part of the production build graph
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return [require('./meta-webhook/dev/meta-dev.module').MetaDevModule];
   } catch {
     return []; // folder not present, nothing to load
@@ -31,6 +35,8 @@ function devModules() {
       envFilePath: '.env.development.local',
     }),
     PrismaModule,
+    RedisModule,
+    HealthModule,
     UsersModule,
     AuthModule,
     ClientsModule,

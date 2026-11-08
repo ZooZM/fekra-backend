@@ -4,3 +4,6 @@ export const AuthGuard = (_name: string) =>
       return true;
     }
   };
+
+// Lets strategies be constructed directly in unit tests.
+export const PassportStrategy = (_strategy: unknown) => class {};

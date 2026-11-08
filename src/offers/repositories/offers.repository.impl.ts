@@ -11,15 +11,14 @@ import { UpdateOfferData } from '../interfaces/update-offer-data.interface';
 import { QueryOfferInput } from '../schemas/query-offer.schema';
 
 const ORDER_FIELDS = ['title', 'startDate', 'endDate', 'createdAt'] as const;
-type OrderField = (typeof ORDER_FIELDS)[number];
 
 @Injectable()
 export class OffersRepository implements IOffersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: QueryOfferInput): Promise<PaginatedResult<Offer>> {
-    const orderBy = ORDER_FIELDS.includes(query.orderBy as OrderField)
-      ? (query.orderBy as OrderField)
+    const orderBy = ORDER_FIELDS.includes(query.orderBy)
+      ? query.orderBy
       : 'createdAt';
     const where: Prisma.OfferWhereInput = {};
     const [data, total] = await this.prisma.$transaction([

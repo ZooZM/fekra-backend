@@ -1,5 +1,4 @@
 import { BusinessInfoService } from './business-info.service';
-import { BUSINESS_INFO_REPOSITORY } from './repositories/IBusinessInfoRepository.repository';
 
 describe('BusinessInfoService', () => {
   let service: BusinessInfoService;
@@ -7,7 +6,10 @@ describe('BusinessInfoService', () => {
 
   beforeEach(() => {
     repo = Object.fromEntries(
-      ['create', 'findByClientId', 'update', 'delete'].map((name) => [name, jest.fn()]),
+      ['create', 'findByClientId', 'update', 'delete'].map((name) => [
+        name,
+        jest.fn(),
+      ]),
     );
     service = new BusinessInfoService(repo as never);
   });

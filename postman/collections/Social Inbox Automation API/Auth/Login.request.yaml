@@ -4,6 +4,8 @@ description: |-
 
   **Auth:** none (credentials in body)
 
+  On success the response sets the httpOnly `fekra_session` cookie (used by *Refresh Session* and *Logout*) and returns `{ user, token }`. After 5 failed sign-ins for an email the account is blocked for 15 minutes; the response is the same `401` as a wrong password.
+
   The test script tries to extract a token from the response (`accessToken`, `access_token` or `token`) and stores it in the `accessToken` collection variable, which is used as the Bearer token for every other request. If your login response uses a different field name, edit the test script on this request.
 
   > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.

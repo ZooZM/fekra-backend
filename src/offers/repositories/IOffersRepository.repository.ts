@@ -6,9 +6,9 @@ import { QueryOfferInput } from '../schemas/query-offer.schema';
 
 export const OFFERS_REPOSITORY = 'OFFERS_REPOSITORY';
 
-export interface IOffersRepository extends IBaseRepository<
+export type IOffersRepository = IBaseRepository<
   Offer,
   CreateOfferData,
   UpdateOfferData,
   QueryOfferInput
-> {}
+>;

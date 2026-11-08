@@ -1,0 +1,419 @@
+openapi: 3.1.0
+info:
+  title: Fekra Admin API (clients dashboard)
+  version: 1.0.0
+  description: |
+    Design contract for feature 001-admin-clients-dashboard. The OpenAPI document that the
+    backend generates from its Zod DTOs (research R10) MUST match these paths and shapes.
+
+    Base URL: `/api` in production and in the Vite dev proxy (the prefix is stripped before
+    requests reach NestJS); the backend itself serves the paths below without a prefix.
+
+    Errors always use the `ErrorBody` shape. Clients branch on `errorCode`, never on `message`.
+
+    Breaking changes in this feature (justified in plan.md, Complexity Tracking):
+      - every /clients operation now requires the ADMIN role (403 for other roles);
+      - PATCH /clients/{id} now requires `version`.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      summary: Sign in and start a session
+      description: |
+        Returns an access token (10 min) and sets the `fekra_session` cookie (HttpOnly, Secure,
+        SameSite=Strict, Path=/api/auth). Five failures for the same email within 15 minutes
+        block that email for 15 minutes. While blocked, the response is identical to a wrong
+        password (FR-027).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 255 }
+                password: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        '201':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: 'fekra_session=<opaque>; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=43200'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          description: 'Wrong email or password, or sign-in temporarily blocked (indistinguishable). errorCode: UNAUTHORIZED, message: "Invalid credentials".'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
+  /auth/refresh:
+    post:
+      summary: Get a new access token from the session cookie
+      description: |
+        Requires the `fekra_session` cookie and an `Origin` header matching the app origin.
+        Refused when the session is revoked, idle for 30 min or more, or past its 12 h limit
+        (FR-003). On refusal the cookie is cleared.
+      security: []
+      parameters:
+        - in: cookie
+          name: fekra_session
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Session extended (lastUsedAt = now)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '401':
+          description: 'errorCode: SESSION_EXPIRED'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '403':
+          description: 'Origin not allowed. errorCode: FORBIDDEN'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+
+  /auth/logout:
+    post:
+      summary: End the session immediately
+      description: Revokes the session, so access tokens carrying its `sid` stop working, and clears the cookie. Idempotent.
+      security: []
+      parameters:
+        - in: cookie
+          name: fekra_session
+          required: false
+          schema: { type: string }
+      responses:
+        '204': { description: Signed out (also returned when there was no session) }
+
+  /clients:
+    get:
+      summary: List clients (ADMIN)
+      parameters:
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - in: query
+          name: orderBy
+          schema: { type: string, enum: [name, businessCategory, createdAt], default: createdAt }
+        - { in: query, name: orderDir, schema: { type: string, enum: [asc, desc], default: desc } }
+        - in: query
+          name: search
+          description: Case-insensitive partial match on name OR businessCategory (FR-007). Total count uses the same filter.
+          schema: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: One page of clients
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedClients' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      summary: Create a client (ADMIN)
+      description: Writes an activity entry CREATED in the same transaction (FR-028).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateClientRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/DuplicateAccount' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /clients/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get one client (ADMIN)
+      responses:
+        '200':
+          description: The client
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    patch:
+      summary: Edit a client (ADMIN, optimistic concurrency)
+      description: |
+        `version` MUST equal the client's current version, or the request fails with 409
+        CLIENT_VERSION_CONFLICT (FR-029). On success, version + 1 and an activity entry UPDATED
+        lists the changed field names. An edit with no differences returns the client unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateClientRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: CLIENT_VERSION_CONFLICT (stale version) or DUPLICATE_KEY_ERROR (account already used)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/VersionConflictError' }
+                  - { $ref: '#/components/schemas/DuplicateAccountError' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      summary: Permanently delete a client (ADMIN)
+      description: Cascades to business info, services and offers; unlinks users. Writes an activity entry DELETED that is kept afterwards.
+      responses:
+        '200': { description: Deleted (empty body) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /clients/{id}/access-token:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    put:
+      summary: Replace a client's access token (ADMIN)
+      description: Write-only; the token is never returned. Does not change `version`. Writes an activity entry ACCESS_TOKEN_REPLACED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 1, maxLength: 4096, writeOnly: true }
+      responses:
+        '200': { description: Replaced (empty body) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized:
+      description: 'Missing, invalid or expired access token, or revoked session. errorCode: UNAUTHORIZED'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    Forbidden:
+      description: 'Signed in without the ADMIN role. errorCode: FORBIDDEN'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    NotFound:
+      description: 'errorCode: NOT_FOUND'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    ValidationFailed:
+      description: 'errorCode: INPUT_VALIDATION_ERROR; details from z.flattenError'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ValidationError' } } }
+    DuplicateAccount:
+      description: 'Facebook Page ID or Instagram account ID already used by another client (FR-012).'
+      content: { application/json: { schema: { $ref: '#/components/schemas/DuplicateAccountError' } } }
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [statusCode, message, errorCode]
+      properties:
+        statusCode: { type: integer }
+        message: { type: string, description: Human-readable; may change. }
+        errorCode: { type: string, description: Stable SCREAMING_SNAKE_CASE identifier. }
+        details: {}
+
+    ValidationError:
+      allOf:
+        - { $ref: '#/components/schemas/ErrorBody' }
+        - type: object
+          properties:
+            errorCode: { const: INPUT_VALIDATION_ERROR }
+            details:
+              type: object
+              properties:
+                formErrors: { type: array, items: { type: string } }
+                fieldErrors:
+                  type: object
+                  additionalProperties: { type: array, items: { type: string } }
+
+    DuplicateAccountError:
+      allOf:
+        - { $ref: '#/components/schemas/ErrorBody' }
+        - type: object
+          properties:
+            errorCode: { const: DUPLICATE_KEY_ERROR }
+            details:
+              type: object
+              required: [field]
+              properties:
+                field: { type: string, enum: [fbPageId, instaAccountId] }
+
+    VersionConflictError:
+      allOf:
+        - { $ref: '#/components/schemas/ErrorBody' }
+        - type: object
+          properties:
+            errorCode: { const: CLIENT_VERSION_CONFLICT }
+            details:
+              type: object
+              required: [currentVersion, updatedAt, updatedBy]
+              properties:
+                currentVersion: { type: integer }
+                updatedAt: { type: string, format: date-time }
+                updatedBy:
+                  description: From the latest activity entry; null if none exists.
+                  oneOf:
+                    - type: 'null'
+                    - type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+
+    SafeUser:
+      type: object
+      required: [id, name, email, roles, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        roles: { type: array, items: { type: string, enum: [ADMIN, CLIENT] } }
+        clientId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AuthSession:
+      type: object
+      required: [user, token]
+      properties:
+        user: { $ref: '#/components/schemas/SafeUser' }
+        token:
+          type: string
+          description: 'Access JWT (10 min) carrying sub, userRoles and sid. Keep in memory only.'
+
+    MetaId:
+      type: string
+      pattern: '^\d{5,30}$'
+
+    MessageList:
+      type: array
+      maxItems: 50
+      items: { type: string, minLength: 1, maxLength: 1000 }
+
+    AiConfig:
+      type: object
+      required: [language]
+      additionalProperties: true
+      properties:
+        language: { type: string, enum: [ARABIC, ENGLISH, ENGLISH_ARABIC] }
+        brandVoice: { type: string, maxLength: 400 }
+
+    DmReplyConfig:
+      type: object
+      additionalProperties: false
+      required: [enabled, likes_enabled, replies]
+      description: On input, enabled=true requires at least one reply (FR-026).
+      properties:
+        enabled: { type: boolean }
+        likes_enabled: { type: boolean }
+        replies: { $ref: '#/components/schemas/MessageList' }
+
+    CommentReplyConfig:
+      type: object
+      additionalProperties: false
+      required: [enabled, likes_enabled, inquiry_can_dm, inquiry_can_not_dm, engagement]
+      properties:
+        enabled: { type: boolean }
+        likes_enabled: { type: boolean }
+        inquiry_can_dm: { $ref: '#/components/schemas/MessageList' }
+        inquiry_can_not_dm: { $ref: '#/components/schemas/MessageList' }
+        engagement: { $ref: '#/components/schemas/MessageList' }
+
+    ClientRecord:
+      type: object
+      description: Never contains the access token.
+      required: [id, name, businessCategory, fbPageId, instaAccountId, brandLogo, aiConfig, dmReplyConfig, commentReplyConfig, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, maxLength: 255 }
+        businessCategory: { type: string, maxLength: 255 }
+        fbPageId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        instaAccountId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        brandLogo: { type: [string, 'null'], format: uri, maxLength: 255 }
+        aiConfig: { $ref: '#/components/schemas/AiConfig' }
+        dmReplyConfig: { $ref: '#/components/schemas/DmReplyConfig' }
+        commentReplyConfig: { $ref: '#/components/schemas/CommentReplyConfig' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PaginatedClients:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ClientRecord' } }
+        meta:
+          type: object
+          required: [total, page, limit, totalPages]
+          properties:
+            total: { type: integer }
+            page: { type: integer }
+            limit: { type: integer }
+            totalPages: { type: integer }
+
+    CreateClientRequest:
+      type: object
+      additionalProperties: false
+      required: [name, businessCategory, accessToken]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        businessCategory: { type: string, minLength: 1, maxLength: 255 }
+        fbPageId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        instaAccountId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        accessToken: { type: string, minLength: 1, writeOnly: true }
+        brandLogo: { type: [string, 'null'], format: uri, maxLength: 255 }
+        aiConfig: { $ref: '#/components/schemas/AiConfig' }
+        dmReplyConfig: { $ref: '#/components/schemas/DmReplyConfig' }
+        commentReplyConfig: { $ref: '#/components/schemas/CommentReplyConfig' }
+
+    UpdateClientRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      description: Any subset of the create fields except accessToken (use PUT /clients/{id}/access-token), plus the version the admin started from.
+      properties:
+        version: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        businessCategory: { type: string, minLength: 1, maxLength: 255 }
+        fbPageId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        instaAccountId: { oneOf: [{ $ref: '#/components/schemas/MetaId' }, { type: 'null' }] }
+        brandLogo: { type: [string, 'null'], format: uri, maxLength: 255 }
+        aiConfig: { $ref: '#/components/schemas/AiConfig' }
+        dmReplyConfig: { $ref: '#/components/schemas/DmReplyConfig' }
+        commentReplyConfig: { $ref: '#/components/schemas/CommentReplyConfig' }

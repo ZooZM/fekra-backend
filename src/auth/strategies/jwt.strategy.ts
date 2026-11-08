@@ -11,17 +11,20 @@ import {
   SafeUser,
   SafeUserWithPasswordChangedAt,
 } from '@app/users/types/safe-user.type';
+import { SessionService } from '../session.service';
 
 interface JwtPayload {
   sub: string;
   iat: number;
   exp: number;
+  sid?: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly usersService: UsersService,
+    private readonly sessions: SessionService,
     configService: ConfigService,
   ) {
     super({
@@ -32,6 +35,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<SafeUser> {
+    // signing out (or the 12 h limit) must stop every access token of that session
+    if (payload.sid && !(await this.sessions.isActive(payload.sid))) {
+      throw new UnauthorizedException();
+    }
+
     let user: SafeUserWithPasswordChangedAt;
     try {
       user = await this.usersService.findByIdWithPassowrdChangedAt(payload.sub);
@@ -50,6 +58,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
 
-    return user as SafeUser;
+    return user;
   }
 }

@@ -7,20 +7,27 @@ describe('UsersController', () => {
 
   beforeEach(() => {
     service = Object.fromEntries(
-      ['findById', 'findAll', 'findByEmail', 'adminCreate', 'update', 'adminUpdate', 'remove']
-        .map((name) => [name, jest.fn()]),
+      [
+        'findById',
+        'findAll',
+        'findByEmail',
+        'adminCreate',
+        'update',
+        'adminUpdate',
+        'remove',
+      ].map((name) => [name, jest.fn()]),
     );
     controller = new UsersController(service as unknown as UsersService);
   });
 
   it('routes reads and writes to the corresponding service methods', async () => {
     const id = { id: 'u1' };
-    await controller.getMe(id);
+    await controller.getMe(id.id);
     await controller.adminFindAll({ page: 1 } as never);
     await controller.adminGetUserById(id);
     await controller.getUserByEmail('a@b.com');
     await controller.adminCreate({ name: 'A' } as never);
-    await controller.updateMe(id, { name: 'B' } as never);
+    await controller.updateMe(id.id, { name: 'B' } as never);
     await controller.adminUpdate(id, { name: 'B' } as never);
     await controller.adminDelete(id);
     expect(service.findById).toHaveBeenNthCalledWith(1, 'u1');
@@ -30,5 +37,35 @@ describe('UsersController', () => {
     expect(service.update).toHaveBeenCalledWith('u1', { name: 'B' });
     expect(service.adminUpdate).toHaveBeenCalledWith('u1', { name: 'B' });
     expect(service.remove).toHaveBeenCalledWith('u1');
+  });
+});
+
+describe('UsersController access rules', () => {
+  const rolesOf = (name: keyof UsersController) =>
+    Reflect.getMetadata('roles', UsersController.prototype[name]);
+
+  it('requires ADMIN on every admin route', () => {
+    for (const name of [
+      'adminFindAll',
+      'adminGetUserById',
+      'getUserByEmail',
+      'adminCreate',
+      'adminUpdate',
+      'adminDelete',
+    ] as const) {
+      expect(rolesOf(name)).toEqual(['ADMIN']);
+    }
+  });
+
+  it('leaves the own-account routes open to any signed-in user', () => {
+    expect(rolesOf('getMe')).toBeUndefined();
+    expect(rolesOf('updateMe')).toBeUndefined();
+  });
+
+  it('uses the JWT and roles guards on the controller', () => {
+    const guards = Reflect.getMetadata('__guards__', UsersController) as {
+      name: string;
+    }[];
+    expect(guards.map((g) => g.name)).toEqual(['JwtAuthGuard', 'RolesGuard']);
   });
 });

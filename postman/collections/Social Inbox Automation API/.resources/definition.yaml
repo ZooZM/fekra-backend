@@ -14,6 +14,7 @@ description: |-
   | `baseUrl` | API root |
   | `accessToken` | JWT (auto-filled on login) |
   | `userEmail` | Email for login / user lookup |
+  | `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |
   | `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |
   | `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |
   | `metaVerifyToken` | Must equal server webhook verify token |
@@ -27,6 +28,7 @@ variables:
   baseUrl: http://localhost:3000
   accessToken: ""
   userEmail: jane@example.com
+  appOrigin: http://localhost:5173
   clientId: ""
   offerId: ""
   serviceId: ""

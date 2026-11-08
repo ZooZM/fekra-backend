@@ -138,7 +138,7 @@ If the item looks related to one of these products, say which one it looks close
       }
       const model = this.genAI.getGenerativeModel({
         model: 'gemini-3.8-flash',
-        systemInstruction: systemInstruction!,
+        systemInstruction: systemInstruction,
         generationConfig: { temperature: 0.2 },
       });
       const prompt =

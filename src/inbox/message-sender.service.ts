@@ -21,8 +21,7 @@ export class MessageSenderService {
   /** Never throws, so callers can use `void sender.reply(...)`. */
   async reply(req: SendableRequest, text: string): Promise<void> {
     try {
-      if (!req.client)
-        throw new GraphError('client is missing', false);
+      if (!req.client) throw new GraphError('client is missing', false);
       const token = await this.clients.getAccessToken(req.client.id);
       if (!token)
         throw new GraphError('No access token stored for this client', false);

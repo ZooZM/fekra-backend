@@ -31,28 +31,33 @@ Templates and guidance files:
                                             env and migration tasks
   ✅ .specify/templates/spec-template.md  - no change needed (stays technology-agnostic)
   ✅ CLAUDE.md                            - points agents at this constitution
-  ⚠ README.md                             - "Deployment" section is NestJS boilerplate (Mau/AWS);
-                                            replace it when the GCP pipeline lands
+  ✅ README.md                             - "Deployment" section describes the GCP pipeline
   n/a .specify/templates/commands/        - directory does not exist in this project
 
 Deferred placeholders: none.
 
 Follow-up TODOs (existing code that does not yet comply; fix or justify):
-  - IV:   /users/admin/* routes check JwtAuthGuard only; add RolesGuard + @Roles('ADMIN').
-  - IV:   CLIENT-role users are not scoped to their own clientId on clients, services, offers
-          and business-info endpoints.
+  Done with the admin clients dashboard feature (specs/001-admin-clients-dashboard):
+  - [x] IV:   /users/admin/* routes now have RolesGuard + @Roles('ADMIN'); the clients routes too.
+  - [x] II:   PUT /clients/:id/access-token takes a Zod DTO (ReplaceAccessTokenDto).
+  - [x] VIII: GET /health (PostgreSQL + Redis), app.enableShutdownHooks(), .env.example added;
+          redis.provider.ts reads its settings through ConfigService (RedisModule).
+  - [x] Frontend Integration: CORS from a CORS_ORIGINS allowlist; the refresh-token flow
+          (POST /auth/refresh and /auth/logout with an httpOnly session cookie).
+  - [x] Delivery: Dockerfile, .github/workflows/ci.yml and deploy.yml, deploy/ files, and the
+          non-mutating `npm run lint:check` script.
+  Still open:
+  - IV:   CLIENT-role users are not scoped to their own clientId on services, offers and
+          business-info endpoints (the clients endpoints are ADMIN-only).
   - IV:   n8n callback compares x-webhook-secret with !==; switch to timingSafeEqual.
-  - II:   n8n callback body and PUT /clients/:id/access-token `token` bypass Zod schemas.
+  - II:   n8n callback body bypasses Zod schemas.
   - II:   retire class-validator leftovers (BaseQueryDto, ValidationPipe in main.ts) and the
-          unused ResponseDto; drop the duplicate default ZodValidationPipe in main.ts.
-  - VIII: add GET /health (PostgreSQL + Redis), app.enableShutdownHooks(), .env.example;
-          move process.env reads in redis.provider.ts and n8n-callback.controller.ts to
-          ConfigService.
-  - Frontend Integration: enable CORS from a CORS_ORIGINS allowlist; implement the refresh-token
-          flow (RefreshToken model exists, no endpoint yet).
-  - Delivery: add Dockerfile, .github/workflows/ci.yml and deploy.yml, and a non-mutating lint
-          script for CI (`npm run lint` currently runs with --fix).
+          unused ResponseDto.
+  - VIII: move the process.env reads in n8n-callback.controller.ts to ConfigService.
+  - Lint: the no-unsafe-* and no-base-to-string rules are warnings (47 warnings, mostly in the
+          error filter, inbox and repositories); raise them to errors once cleaned up.
   - Stack: remove unused mongoose and @nestjs/mongoose dependencies.
+  - README: the Deployment section is now the GCP pipeline (done); the rest is NestJS boilerplate.
 -->
 
 # Fekra Backend Constitution

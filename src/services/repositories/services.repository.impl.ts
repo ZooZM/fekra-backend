@@ -11,15 +11,14 @@ import { UpdateServiceData } from '../interfaces/update-service-data.interface';
 import { QueryServiceInput } from '../schemas/query-service.schema';
 
 const ORDER_FIELDS = ['name', 'price', 'createdAt'] as const;
-type OrderField = (typeof ORDER_FIELDS)[number];
 
 @Injectable()
 export class ServicesRepository implements IServicesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: QueryServiceInput): Promise<PaginatedResult<Service>> {
-    const orderBy = ORDER_FIELDS.includes(query.orderBy as OrderField)
-      ? (query.orderBy as OrderField)
+    const orderBy = ORDER_FIELDS.includes(query.orderBy)
+      ? query.orderBy
       : 'createdAt';
     const where: Prisma.ServiceWhereInput = {};
     const [data, total] = await this.prisma.$transaction([

@@ -20,6 +20,14 @@
 - Q: How is sign-in protected against password guessing? → A: After 5 failed attempts for the
   same email within 15 minutes, sign-in for that email is blocked for 15 minutes, with a generic
   message (FR-027).
+- Q: Are administrator actions recorded? → A: Yes. Every create, edit, delete and token
+  replacement is recorded with the administrator, client, time and changed field names (never
+  token values), kept for at least 1 year, with no viewing screen in v1 (FR-028).
+- Q: What happens when two administrators edit the same client? → A: A save based on an outdated
+  version is refused; the administrator sees who changed the client and when, keeps their typed
+  input, and can reload the latest version (FR-029).
+- Q: What accessibility level does the dashboard meet? → A: WCAG 2.2 level AA on every screen in
+  both languages, checked by an automated scan and a keyboard-only walkthrough (FR-030).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -109,6 +117,9 @@ the detail view and the list, while the access token stays unchanged.
    page, **Then** they are asked to confirm discarding the changes.
 4. **Given** an existing client, **When** the administrator saves any edit, **Then** the client's
    access token is not changed.
+5. **Given** two administrators opened the same client and the first one saved a change,
+   **When** the second one saves, **Then** the save is refused, they see who changed the client
+   and when, their typed input stays on screen, and they can reload the latest version.
 
 ---
 
@@ -142,7 +153,7 @@ An administrator permanently removes a business that no longer uses the platform
 **Why this priority**: It is needed but rare, and the most destructive action, so it comes last.
 
 **Independent Test**: Delete a client after confirming and check that it disappears from the list
-and its detail link shows "not found". Then start a deletion, cancel it, and check that nothing
+and its detail link shows "no longer exists". Then start a deletion, cancel it, and check that nothing
 changed.
 
 **Acceptance Scenarios**:
@@ -152,7 +163,7 @@ changed.
    removed, its user accounts will be unlinked, and automation for its accounts will stop. The
    administrator must type the client's name to confirm.
 2. **Given** the administrator completes the confirmation, **When** the deletion finishes,
-   **Then** the client no longer appears in the list and its detail link shows "not found".
+   **Then** the client no longer appears in the list and its detail link shows "no longer exists".
 3. **Given** the deletion confirmation, **When** the administrator cancels, **Then** nothing is
    changed.
 
@@ -200,7 +211,8 @@ confirm nothing is saved.
 - **Repeated failed sign-ins**: after the fifth failure within 15 minutes, further attempts for
   that email are refused with the same generic message, including correct ones, until 15 minutes
   have passed. Other administrators can still sign in.
-- **Two administrators edit the same client**: the last save wins.
+- **Two administrators edit the same client**: the later save is refused because it was based on
+  an outdated version (FR-029). No change is lost silently.
 - **Client deleted by another administrator while open**: any further action shows that the
   client no longer exists and returns the administrator to the list.
 - **Server unreachable or failing**: the administrator sees a clear error with a way to retry.
@@ -282,6 +294,10 @@ confirm nothing is saved.
   Instagram account ID, the dashboard MUST warn that the platform will stop handling the old
   account and MUST require confirmation.
 - **FR-015**: The dashboard MUST ask for confirmation before discarding unsaved changes.
+- **FR-029**: An edit to a client's details or settings MUST be refused if the client was changed
+  after the administrator opened it. The refusal MUST name who made the newer change and when,
+  MUST keep the administrator's typed input on screen, and MUST offer to load the latest version.
+  This check does not apply to access-token replacement or deletion.
 
 **Access token**
 
@@ -298,7 +314,7 @@ confirm nothing is saved.
   that lists the consequences (business information, services and offers removed; user accounts
   unlinked; automation for its accounts stopped) and requires typing the client's name.
 - **FR-020**: A deleted client MUST disappear from the list, and its detail link MUST show
-  "not found".
+  "no longer exists".
 
 **Feedback and presentation**
 
@@ -311,6 +327,10 @@ confirm nothing is saved.
   browser's preferred language when it is Arabic or English, and use English otherwise.
 - **FR-024**: Client data written in Arabic or English MUST display correctly, including
   right-to-left text, whatever the interface language.
+- **FR-030**: Every screen MUST meet WCAG 2.2 level AA in both English and Arabic. Every action
+  MUST be possible with the keyboard alone, with a visible focus indicator. Controls, validation
+  errors and success or failure messages MUST be announced by screen readers. Text and controls
+  MUST meet AA contrast.
 
 **Automation settings**
 
@@ -320,6 +340,15 @@ confirm nothing is saved.
 - **FR-026**: When private messages are turned on, at least one private message MUST be provided.
   An empty comment message list MUST be allowed, and the dashboard MUST state that the
   platform's built-in default messages will be used for that case.
+
+**Activity record**
+
+- **FR-028**: The system MUST keep an activity record of every successful client creation, edit,
+  deletion and access-token replacement. Each entry MUST hold the administrator who acted, the
+  client affected, the action, the time, and for edits the names of the changed fields. Entries
+  MUST NOT contain access token values. Entries MUST be kept for at least 1 year, MUST survive
+  the deletion of the client or the administrator account they refer to, and MUST NOT be editable
+  by administrators. A screen to view the record is not part of v1.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -333,6 +362,10 @@ confirm nothing is saved.
   feature.
 - **Access token**: the credential that lets the platform act on a client's Facebook page and
   Instagram account. It is stored protected and is never revealed after entry.
+- **Activity record entry**: one administrator action on a client. It holds the administrator,
+  the client (with its name at the time of the action), the action (created, edited, deleted,
+  token replaced), the time, and the changed field names. It cannot be changed after it is
+  written, and it outlives the client and the administrator account it refers to.
 
 ## Success Criteria *(mandatory)*
 
@@ -360,6 +393,13 @@ confirm nothing is saved.
 - **SC-010**: In acceptance testing, a correct password entered after 5 failed attempts within
   15 minutes is refused, and the same password succeeds once 15 minutes have passed. Responses
   for unknown and known emails cannot be told apart.
+- **SC-011**: In acceptance testing, each successful create, edit, delete and token replacement
+  produces exactly one activity record entry naming the correct administrator and client, and 0
+  entries contain an access token value.
+- **SC-012**: In acceptance testing, 100% of saves based on an outdated version of a client are
+  refused, and 0 changes made by another administrator are overwritten without warning.
+- **SC-013**: Every screen, in both languages, passes an automated accessibility scan with 0
+  WCAG 2.2 AA violations. Every user story can be completed using only the keyboard.
 
 ## Assumptions
 
@@ -373,13 +413,14 @@ confirm nothing is saved.
   minutes idle, 12 hours maximum) and are not configurable by each administrator. "Remember me"
   and password reset are out of scope.
 - Scale: up to about 500 clients and up to 10 administrators.
-- Concurrent edits to the same client use last-save-wins. There is no locking or merge.
+- Simultaneous edits to the same client are handled by refusing the outdated save (FR-029). There
+  is no locking and no automatic merge of changes.
 - Deletion is permanent, with no archive or restore, matching current platform behavior. Database
   backups are the only recovery path.
 - An access token is required when a client is created. The token is not checked against Meta
   when entered; validity checking is out of scope.
-- Managing business information, services, offers and user accounts, and keeping an audit
-  history of changes, are out of scope and left to future features.
+- Managing business information, services, offers and user accounts, and a screen for browsing
+  the activity record (FR-028), are out of scope and left to future features.
 - The dashboard is used mainly in desktop browsers and works at tablet width. A phone-optimized
   layout is not required.
 - The dashboard is a web application separate from the platform's server, and is released

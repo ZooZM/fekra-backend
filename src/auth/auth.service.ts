@@ -7,6 +7,15 @@ import { SafeUser } from '@app/users/types/safe-user.type';
 import * as authConstants from './consts/auth.contants';
 import { RegisterUserInput } from './schemas/auth.schema';
 import { CreateUserInput } from '@app/users/schemas/user.schema';
+import { SessionService } from './session.service';
+import { LoginThrottleService } from './login-throttle.service';
+
+export interface LoginResult {
+  user: SafeUser;
+  token: string;
+  /** Cookie value and expiry for the controller to set; never part of the response body. */
+  session: { cookieValue: string; expiresAt: Date };
+}
 
 @Injectable()
 export class AuthService {
@@ -14,6 +23,8 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly sessions: SessionService,
+    private readonly throttle: LoginThrottleService,
   ) {}
 
   async generateJwt(payload: JwtPayload): Promise<string> {
@@ -25,27 +36,43 @@ export class AuthService {
     return token;
   }
 
-  async validateUser(
-    email: string,
-    password: string,
-  ): Promise<{ user: SafeUser; token: string }> {
-    const user = await this.usersService.findByEmailWithPassword(email);
+  async validateUser(rawEmail: string, password: string): Promise<LoginResult> {
+    const email = rawEmail.trim().toLowerCase();
+    const blocked = await this.throttle.isBlocked(email);
 
+    const user = blocked
+      ? null
+      : await this.usersService.findByEmailWithPassword(email);
+
+    // always run bcrypt, so timing doesn't reveal an unknown email or an active block
     const isMatch = await authConstants.compare(
       password,
       user?.passwordHash ?? authConstants.getDummyHash(),
     );
-    if (!user || !isMatch) {
+
+    if (blocked || !user || !isMatch) {
+      if (!blocked) await this.throttle.recordFailure(email);
+      // the same error for a wrong password, an unknown email and a block
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    await this.throttle.reset(email);
+    const session = await this.sessions.start(user.id);
     const token = await this.generateJwt({
       sub: user.id,
       userRoles: user.roles,
+      sid: session.sessionId,
     });
 
-    const { passwordHash, ...safeUser } = user;
-    return { user: safeUser, token };
+    const { passwordHash: _passwordHash, ...safeUser } = user;
+    return {
+      user: safeUser,
+      token,
+      session: {
+        cookieValue: session.cookieValue,
+        expiresAt: session.expiresAt,
+      },
+    };
   }
 
   async registerUser(

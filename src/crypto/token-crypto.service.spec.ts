@@ -1,14 +1,15 @@
 import { TokenCryptoService } from './token-crypto.service';
 
 describe('TokenCryptoService', () => {
-  const key = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const key =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
   it.each(['', 'abc', 'g'.repeat(64), '0'.repeat(63)])(
     'rejects invalid key %s',
     (invalid) => {
-      expect(() => new TokenCryptoService({ get: () => invalid } as never)).toThrow(
-        'TOKEN_ENCRYPTION_KEY must be 64 hex characters',
-      );
+      expect(
+        () => new TokenCryptoService({ get: () => invalid } as never),
+      ).toThrow('TOKEN_ENCRYPTION_KEY must be 64 hex characters');
     },
   );
 
@@ -31,7 +32,12 @@ describe('TokenCryptoService', () => {
     );
     expect(() => service.decrypt(first, 'client-2')).toThrow();
     const [version, iv, tag, data] = first.split(':');
-    const tampered = [version, iv, tag, (data[0] === 'A' ? 'B' : 'A') + data.slice(1)].join(':');
+    const tampered = [
+      version,
+      iv,
+      tag,
+      (data[0] === 'A' ? 'B' : 'A') + data.slice(1),
+    ].join(':');
     expect(() => service.decrypt(tampered, 'client-1')).toThrow();
   });
 });

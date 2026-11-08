@@ -95,17 +95,17 @@ export class UsersRepository implements IUsersRepository {
       data,
     });
 
-    this.logger.debug(`update(${id}), data(${data}), result(${result})))`);
+    this.logger.debug(`update(${id})`); // never log the data: it can hold a password hash
 
     return result;
   }
 
   async delete(id: string): Promise<void> {
-    const res = await this.prisma.user.delete({
+    await this.prisma.user.delete({
       where: { id },
     });
 
-    this.logger.debug(`delete(${id}), deletedUser(${res})`);
+    this.logger.debug(`delete(${id})`);
   }
 
   async findByValidResetToken(tokenHash: string): Promise<SafeUser | null> {

@@ -22,22 +22,29 @@ describe('ClientsController', () => {
     controller = new ClientsController(service as unknown as ClientsService);
   });
 
-  it('forwards client CRUD arguments', async () => {
-    await controller.create({ name: 'A' } as never);
+  const user = { id: 'a1', name: 'Admin', email: 'admin@example.com' } as never;
+  const actor = { id: 'a1', name: 'Admin', email: 'admin@example.com' };
+
+  it('forwards client CRUD arguments with the acting admin', async () => {
+    await controller.create({ name: 'A' } as never, user);
     await controller.findAll({ page: 1 } as never);
     await controller.findById({ id: 'c1' });
-    await controller.update({ id: 'c1' }, { name: 'B' } as never);
-    await controller.remove({ id: 'c1' });
-    expect(service.create).toHaveBeenCalledWith({ name: 'A' });
+    await controller.update({ id: 'c1' }, { name: 'B', version: 2 }, user);
+    await controller.remove({ id: 'c1' }, user);
+    expect(service.create).toHaveBeenCalledWith({ name: 'A' }, actor);
     expect(service.findAll).toHaveBeenCalledWith({ page: 1 });
     expect(service.findById).toHaveBeenCalledWith('c1');
-    expect(service.update).toHaveBeenCalledWith('c1', { name: 'B' });
-    expect(service.remove).toHaveBeenCalledWith('c1');
+    expect(service.update).toHaveBeenCalledWith(
+      'c1',
+      { name: 'B', version: 2 },
+      actor,
+    );
+    expect(service.remove).toHaveBeenCalledWith('c1', actor);
   });
 
-  it('forwards access-token updates', async () => {
-    await controller.setAccessToken({ id: 'c1' }, 'token');
-    expect(service.setAccessToken).toHaveBeenCalledWith('c1', 'token');
+  it('forwards access-token replacement with the acting admin', async () => {
+    await controller.setAccessToken({ id: 'c1' }, { token: 'token' }, user);
+    expect(service.setAccessToken).toHaveBeenCalledWith('c1', 'token', actor);
   });
 
   it('rejects an :id that is not a UUID (e.g. a Facebook page id) before the database', () => {
@@ -51,5 +58,15 @@ describe('ClientsController', () => {
     expect(validate('8ed9f96d-c790-4279-ba5f-88feec1c68e3')).toEqual({
       id: '8ed9f96d-c790-4279-ba5f-88feec1c68e3',
     });
+  });
+});
+
+describe('ClientsController access rules', () => {
+  it('requires the ADMIN role and both guards for every route', () => {
+    expect(Reflect.getMetadata('roles', ClientsController)).toEqual(['ADMIN']);
+    const guards = Reflect.getMetadata('__guards__', ClientsController) as {
+      name: string;
+    }[];
+    expect(guards.map((g) => g.name)).toEqual(['JwtAuthGuard', 'RolesGuard']);
   });
 });

@@ -11,7 +11,6 @@ import {
 import { BusinessInfoService } from './business-info.service';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 import { CreateBusinessInfoDto } from './schemas/business-info.schema';
-import { IdParamDto } from '@app/common/zod/dtos';
 
 @Controller('business-info')
 @UseGuards(JwtAuthGuard)

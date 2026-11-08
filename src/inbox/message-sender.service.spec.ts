@@ -55,8 +55,11 @@ describe('MessageSenderService', () => {
     ['missing token', request],
     ['missing sender', { ...request, senderId: undefined }],
   ])('dead-letters %s without throwing', async (_label, input) => {
-    if (_label === 'missing token') clients.getAccessToken.mockResolvedValue(null);
-    await expect(service.reply(input as SendableRequest, 'hello')).resolves.toBeUndefined();
+    if (_label === 'missing token')
+      clients.getAccessToken.mockResolvedValue(null);
+    await expect(
+      service.reply(input as SendableRequest, 'hello'),
+    ).resolves.toBeUndefined();
     expect(graph.deadLetter).toHaveBeenCalledWith(
       expect.objectContaining({ service: 'message', text: 'hello' }),
     );

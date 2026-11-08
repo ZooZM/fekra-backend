@@ -1,5 +1,4 @@
 import { OffersService } from './offers.service';
-import { OFFERS_REPOSITORY } from './repositories/IOffersRepository.repository';
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@app/generated/prisma/client';
 
@@ -9,7 +8,10 @@ describe('OffersService', () => {
 
   beforeEach(() => {
     repo = Object.fromEntries(
-      ['create', 'findAll', 'findById', 'update', 'delete'].map((name) => [name, jest.fn()]),
+      ['create', 'findAll', 'findById', 'update', 'delete'].map((name) => [
+        name,
+        jest.fn(),
+      ]),
     );
     service = new OffersService(repo as never);
   });
@@ -18,7 +20,10 @@ describe('OffersService', () => {
     repo.create.mockResolvedValue({});
     repo.findAll.mockResolvedValue({ data: [], meta: {} });
     await service.create({} as never);
-    await expect(service.findAll({} as never)).resolves.toEqual({ data: [], meta: {} });
+    await expect(service.findAll({} as never)).resolves.toEqual({
+      data: [],
+      meta: {},
+    });
     await service.remove('o1');
     expect(repo.create).toHaveBeenCalledWith({});
     expect(repo.delete).toHaveBeenCalledWith('o1');
@@ -40,6 +45,8 @@ describe('OffersService', () => {
 
   it('throws when an offer is missing', async () => {
     repo.findById.mockResolvedValue(null);
-    await expect(service.findById('missing')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.findById('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

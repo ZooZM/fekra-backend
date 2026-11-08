@@ -1,5 +1,4 @@
 import { UsersService } from './users.service';
-import { USERS_REPOSITORY } from './repositories/IUsersRepository.repository';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as authConstants from '@app/auth/consts/auth.contants';
 
@@ -9,12 +8,20 @@ describe('UsersService', () => {
 
   beforeEach(() => {
     repo = Object.fromEntries(
-      ['findAll', 'findById', 'findByIdWithPassowrdChangedAt', 'findByEmail',
-        'findByEmailWithPassword', 'create', 'update', 'updatePasswordHash',
-        'updateEmail', 'setRoles', 'setResetToken', 'delete'].map((name) => [
-        name,
-        jest.fn(),
-      ]),
+      [
+        'findAll',
+        'findById',
+        'findByIdWithPassowrdChangedAt',
+        'findByEmail',
+        'findByEmailWithPassword',
+        'create',
+        'update',
+        'updatePasswordHash',
+        'updateEmail',
+        'setRoles',
+        'setResetToken',
+        'delete',
+      ].map((name) => [name, jest.fn()]),
     );
     service = new UsersService(repo as never);
   });
@@ -31,7 +38,9 @@ describe('UsersService', () => {
     'throws when %s cannot find a user',
     async (method) => {
       repo[method].mockResolvedValue(null);
-      const call = (service as unknown as Record<string, (id: string) => Promise<unknown>>)[method];
+      const call = (
+        service as unknown as Record<string, (id: string) => Promise<unknown>>
+      )[method];
       await expect(call.call(service, 'missing')).rejects.toBeInstanceOf(
         NotFoundException,
       );
@@ -55,7 +64,9 @@ describe('UsersService', () => {
       roles: [],
       clientId: undefined,
     });
-    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ passwordHash: 'hashed' }));
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ passwordHash: 'hashed' }),
+    );
 
     repo.update.mockResolvedValue({});
     await service.adminUpdate('u1', { password: 'new-password' });

@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fekra_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      # dummy values: the database name must contain "test" (the e2e tests empty its tables)
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fekra_test
+      JWT_SECRET: ci-jwt-secret
+      JWT_EXPIRES_IN: 10m
+      TOKEN_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      REDIS_DB: '15' # the app sets notify-keyspace-events on startup: keep it off db 0
+      APP_ORIGIN: http://localhost:5173
+      GEMINI_API_KEY: ci-not-used
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint:check
+      - run: npm run build
+      - run: npm test
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e -- --forceExit
+      # the dashboard builds its types from this file: it must match the code
+      - run: npm run openapi:export
+      - name: openapi.json is up to date
+        run: git diff --exit-code openapi/openapi.json
+
+  # Builds the images that passed the checks above. Deploy reuses exactly these (no rebuild),
+  # so what runs in production is what was tested.
+  publish:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: ${{ env.REGISTRY }}/fekra-api:${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Build and push the migration image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: migrate
+          push: true
+          tags: ${{ env.REGISTRY }}/fekra-api-migrate:${{ github.sha }}
+          cache-from: type=gha,scope=migrate
+          cache-to: type=gha,scope=migrate,mode=max

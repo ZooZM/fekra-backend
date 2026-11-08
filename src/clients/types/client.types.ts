@@ -28,3 +28,22 @@ export type ClientWorkflowData = ClientRecord & {
   offers: Offer[];
   businessInfo: BusinessInfoRecord | null;
 };
+
+/** The admin who made a change; copied into the activity log. */
+export interface ClientActor {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface VersionConflictDetails {
+  currentVersion: number;
+  updatedAt: Date;
+  updatedBy: { id: string; name: string } | null;
+}
+
+export type ClientUpdateResult =
+  | { status: 'updated' | 'unchanged'; record: ClientRecord }
+  | ({ status: 'conflict' } & VersionConflictDetails);
+
+export type AccountField = 'fbPageId' | 'instaAccountId';

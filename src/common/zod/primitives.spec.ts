@@ -27,7 +27,9 @@ describe('common zod primitives', () => {
 
   it('enforces reply and case-insensitive uniqueness limits', () => {
     expect(replies.safeParse(['hello']).success).toBe(true);
-    expect(replies.safeParse(Array.from({ length: 51 }, () => 'x')).success).toBe(false);
+    expect(
+      replies.safeParse(Array.from({ length: 51 }, () => 'x')).success,
+    ).toBe(false);
     expect(uniqueStrings().safeParse(['One', 'two']).success).toBe(true);
     expect(uniqueStrings().safeParse(['One', 'one']).success).toBe(false);
   });
@@ -36,7 +38,12 @@ describe('common zod primitives', () => {
     expect(emailField.parse('  USER@Example.COM ')).toBe('user@example.com');
     expect(nameField.parse('  Alice ')).toBe('Alice');
     expect(passwordField.safeParse('short').success).toBe(false);
-    expect(IdParamSchema.safeParse({ id: '00000000-0000-4000-8000-000000000000' }).success).toBe(true);
-    expect(IdParamSchema.safeParse({ id: 'not-an-id', extra: true }).success).toBe(false);
+    expect(
+      IdParamSchema.safeParse({ id: '00000000-0000-4000-8000-000000000000' })
+        .success,
+    ).toBe(true);
+    expect(
+      IdParamSchema.safeParse({ id: 'not-an-id', extra: true }).success,
+    ).toBe(false);
   });
 });

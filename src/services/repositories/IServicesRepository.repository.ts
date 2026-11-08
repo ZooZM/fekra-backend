@@ -6,9 +6,9 @@ import { QueryServiceInput } from '../schemas/query-service.schema';
 
 export const SERVICES_REPOSITORY = 'SERVICES_REPOSITORY';
 
-export interface IServicesRepository extends IBaseRepository<
+export type IServicesRepository = IBaseRepository<
   Service,
   CreateServiceData,
   UpdateServiceData,
   QueryServiceInput
-> {}
+>;

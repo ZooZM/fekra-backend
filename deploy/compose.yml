@@ -1,0 +1,108 @@
+# Production runtime on the GCP VM (plan task T114; constitution "Delivery Pipeline & Deployment").
+# The deploy workflow copies deploy/ to /opt/fekra/deploy/ and drives it with remote-deploy.sh.
+#
+# - Only Caddy publishes ports (80/443). The API, dashboard, Redis and PostgreSQL are reachable
+#   only on the internal compose network.
+# - Images are pinned by commit SHA (never `latest`): API_IMAGE, MIGRATE_IMAGE, DASHBOARD_IMAGE.
+#   DOMAIN is the public host name Caddy gets a certificate for. Set these in the shell or in
+#   /opt/fekra/deploy/.env, which is read for interpolation only and never holds secrets.
+# - App secrets live in /opt/fekra/.env (mode 600, owned by the deploy user). Only the containers
+#   that list it receive them; nothing is baked into an image.
+#
+# Deploy sequence:
+#   docker compose -f deploy/compose.yml run --rm migrate   # prisma migrate deploy (new image)
+#   docker compose -f deploy/compose.yml up -d api          # then poll https://$DOMAIN/api/health
+#   docker compose -f deploy/compose.yml up -d caddy
+#   docker compose -f deploy/compose.yml up -d dashboard    # once fekra-dashboard publishes an image
+# Naming a service enables its profile, so `migrate` and `dashboard` need no --profile flag.
+# PostgreSQL on the VM instead of Cloud SQL: `up -d postgres` first, and point DATABASE_URL in
+# /opt/fekra/.env at postgres:5432.
+
+name: fekra
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the public host name}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # TLS certificates and keys: keep this volume
+      - caddy-config:/config
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?set API_IMAGE to the API image pinned by commit SHA}
+    restart: unless-stopped
+    env_file: /opt/fekra/.env
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging: *logging
+
+  # One-off, before every API rollout. The `migrate` target of the same commit's Dockerfile.
+  migrate:
+    image: ${MIGRATE_IMAGE:-}
+    profiles: [migrate]
+    restart: 'no'
+    env_file: /opt/fekra/.env
+    logging: *logging
+
+  # Published by the fekra-dashboard repository: nginx serving the SPA on port 8080.
+  dashboard:
+    image: ${DASHBOARD_IMAGE:-}
+    profiles: [dashboard]
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # Ex: the inbox relies on key-expiry events (the API also sets this on startup).
+    command: [redis-server, --appendonly, 'yes', --notify-keyspace-events, Ex]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *logging
+
+  # Only when PostgreSQL runs on the VM rather than Cloud SQL.
+  # /opt/fekra/postgres.env holds POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB.
+  postgres:
+    image: postgres:16
+    profiles: [local-db]
+    restart: unless-stopped
+    env_file:
+      - path: /opt/fekra/postgres.env
+        required: false
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:
+  postgres-data:

@@ -9,12 +9,9 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     super({ usernameField: 'email' });
   }
 
+  // Passport guards run before pipes, so the email is normalized here (trim + lowercase)
+  // by validateUser before the throttle check and the user lookup.
   async validate(email: string, password: string) {
-    const { user, token } = await this.authService.validateUser(
-      email,
-      password,
-    );
-
-    return { user, token };
+    return this.authService.validateUser(email, password);
   }
 }

@@ -10,10 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { OffersService } from './offers.service';
-import {
-  CreateOfferDto,
-  UpdateOfferDto,
-} from './schemas/offer.schema';
+import { CreateOfferDto, UpdateOfferDto } from './schemas/offer.schema';
 import { QueryOfferDto } from './schemas/query-offer.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 

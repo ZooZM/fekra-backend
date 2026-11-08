@@ -4,7 +4,11 @@
     "node_modules",
     "test",
     "dist",
-    "**/*spec.ts"
+    "**/*spec.ts",
+    // Root-level tooling (run by the Prisma CLI / ts-node, not part of the app). Compiling it
+    // moves the output to dist/src/, which breaks `node dist/main`.
+    "prisma7.config.ts",
+    "scripts"
     // Exclude dev folder from build
     // "src/meta-webhook/dev/**"
   ]

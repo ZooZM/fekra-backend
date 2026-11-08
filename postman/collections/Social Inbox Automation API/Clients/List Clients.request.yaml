@@ -2,7 +2,9 @@ $kind: http-request
 description: |-
   Lists clients.
 
-  **Query:** `QueryClientDto`
+  **Requires:** `ADMIN` role.
+
+  **Query:** `QueryClientDto`: `page`, `limit`, `orderBy` (`name`, `businessCategory`, `createdAt`), `orderDir`, and `search` (1 to 100 characters, matches name or category ignoring case; `%` and `_` are literal).
 url: "{{baseUrl}}/clients?page=1&limit=20"
 method: GET
 queryParams:
@@ -15,9 +17,9 @@ queryParams:
     disabled: false
     description: Page size
   - key: search
-    value: ""
+    value: cafe
     disabled: true
-    description: Free-text search
+    description: Matches business name or category, ignoring case (1-100 characters)
 scripts:
   - type: afterResponse
     code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));

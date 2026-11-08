@@ -7,15 +7,23 @@ describe('BusinessInfoController', () => {
 
   beforeEach(() => {
     service = Object.fromEntries(
-      ['create', 'findByClientId', 'update', 'remove'].map((name) => [name, jest.fn()]),
+      ['create', 'findByClientId', 'update', 'remove'].map((name) => [
+        name,
+        jest.fn(),
+      ]),
     );
-    controller = new BusinessInfoController(service as unknown as BusinessInfoService);
+    controller = new BusinessInfoController(
+      service as unknown as BusinessInfoService,
+    );
   });
 
   it('adds the route client id when creating business info', async () => {
     const dto = { description: 'about' };
     await controller.create('c1', dto as never);
-    expect(service.create).toHaveBeenCalledWith({ description: 'about', clientId: 'c1' });
+    expect(service.create).toHaveBeenCalledWith({
+      description: 'about',
+      clientId: 'c1',
+    });
   });
 
   it('forwards lookup, update, and removal', async () => {

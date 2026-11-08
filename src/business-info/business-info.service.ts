@@ -3,7 +3,6 @@ import {
   IBusinessInfoRepository,
   BUSINESS_INFO_REPOSITORY,
 } from './repositories/IBusinessInfoRepository.repository';
-import { BusinessInfo } from '@app/generated/prisma/client';
 import {
   CreateBusinessInfoInput,
   UpdateBusinessInfoInput,

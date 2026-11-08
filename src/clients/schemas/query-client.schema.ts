@@ -6,6 +6,9 @@ import { listQuery } from '@common/zod/list-query.schema';
 export const QueryClientSchema = listQuery(
   ['name', 'businessCategory', 'createdAt'],
   'createdAt',
-);
+).extend({
+  // case-insensitive partial match on name or business category (FR-007)
+  search: z.string().trim().min(1).max(100).optional(),
+});
 export type QueryClientInput = z.infer<typeof QueryClientSchema>;
 export class QueryClientDto extends createZodDto(QueryClientSchema) {}

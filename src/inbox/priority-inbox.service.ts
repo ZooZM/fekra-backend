@@ -283,7 +283,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           reason = `${reason}, fallback to spam`;
         }
         this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
- 
+
         // reply / DM / like / hide, handled entirely in Nest (no n8n for comments)
         await this.commentReply.handle(
           { ...item, clientId: client.id, client },

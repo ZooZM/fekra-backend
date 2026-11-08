@@ -1,0 +1,16 @@
+# Production reverse proxy (plan task T114, research R1).
+# One origin for both apps: the dashboard at /, the API at /api/* with the /api prefix
+# stripped, so API routes are unchanged (the Meta webhook is https://{$DOMAIN}/api/webhooks/meta).
+# Caddy obtains and renews the TLS certificate for DOMAIN on its own.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy dashboard:8080
+	}
+}

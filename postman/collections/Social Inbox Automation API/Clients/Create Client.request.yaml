@@ -1,10 +1,15 @@
 $kind: http-request
 description: |-
-  Creates a client.
+  Creates a client. **Requires:** `ADMIN` role (403 otherwise).
 
-  **Body:** `CreateClientDto`
+  **Body:** `CreateClientDto`. `accessToken` is plaintext in and stored encrypted; it is never returned.
 
-  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+  **Responses**
+  - `201` the client, `version: 1`. A `CREATED` activity entry is recorded.
+  - `409` `DUPLICATE_KEY_ERROR` with `details.field` (`fbPageId` or `instaAccountId`) when that account already belongs to another client. Nothing is created.
+  - `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, missing token, private-message replies on with no message.
+
+  > Use a placeholder token. Never put a real Meta token in this collection.
 url: "{{baseUrl}}/clients"
 method: POST
 headers:
@@ -14,14 +19,30 @@ body:
   content: |-
     {
       "name": "Acme Coffee",
-      "email": "owner@acmecoffee.com"
+      "businessCategory": "Coffee shop",
+      "fbPageId": "100000000001",
+      "instaAccountId": null,
+      "brandLogo": "https://example.com/logo.png",
+      "accessToken": "EXAMPLE-TOKEN-REPLACE-ME",
+      "aiConfig": { "language": "ARABIC" },
+      "dmReplyConfig": { "enabled": true, "likes_enabled": false, "replies": ["Thanks, we sent you a message"] },
+      "commentReplyConfig": {
+        "enabled": false,
+        "likes_enabled": false,
+        "inquiry_can_dm": [],
+        "inquiry_can_not_dm": [],
+        "engagement": []
+      }
     }
 scripts:
   - type: afterResponse
     code: |-
-      pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));
+      pm.test('Status is 201', () => pm.expect(pm.response.code).to.eql(201));
       const json = pm.response.json();
-      const id = json.id || json._id || (json.data && (json.data.id || json.data._id));
-      if (id) { pm.collectionVariables.set('clientId', id); console.log('clientId saved:', id); }
+      pm.test('Starts at version 1 and never returns the token', () => {
+        pm.expect(json.version).to.eql(1);
+        pm.expect(JSON.stringify(json)).to.not.include('accessToken');
+      });
+      if (json.id) { pm.collectionVariables.set('clientId', json.id); pm.collectionVariables.set('resourceId', json.id); }
     language: text/javascript
 order: 1000

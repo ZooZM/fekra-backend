@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "1c530d55-62c9-55df-a8ae-e41f4db4c437",
     "name": "Social Inbox Automation API",
-    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
+    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -110,7 +110,89 @@
                 "login"
               ]
             },
-            "description": "Authenticates with `LocalGuard` (Passport local strategy). The controller returns `request.user` as-is.\n\n**Auth:** none (credentials in body)\n\nThe test script tries to extract a token from the response (`accessToken`, `access_token` or `token`) and stores it in the `accessToken` collection variable, which is used as the Bearer token for every other request. If your login response uses a different field name, edit the test script on this request.\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+            "description": "Authenticates with `LocalGuard` (Passport local strategy). The controller returns `request.user` as-is.\n\n**Auth:** none (credentials in body)\n\nOn success the response sets the httpOnly `fekra_session` cookie (used by *Refresh Session* and *Logout*) and returns `{ user, token }`. After 5 failed sign-ins for an email the account is blocked for 15 minutes; the response is the same `401` as a wrong password.\n\nThe test script tries to extract a token from the response (`accessToken`, `access_token` or `token`) and stores it in the `accessToken` collection variable, which is used as the Bearer token for every other request. If your login response uses a different field name, edit the test script on this request.\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+          },
+          "response": []
+        },
+        {
+          "id": "bf72bde6-50e0-5603-a725-e886d90a03b2",
+          "name": "Refresh Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 201', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "if (json.token) pm.collectionVariables.set('accessToken', json.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{appOrigin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Trades the `fekra_session` cookie for a new access token (10 minutes). The cookie is rotated on every call.\n\n**Needs:** the cookie from *Login* (Postman keeps it in its cookie jar) and an `Origin` header equal to `APP_ORIGIN` (the `appOrigin` variable). Requests with another origin get `403`.\n\n`401 SESSION_EXPIRED` after 30 minutes idle or 12 hours since sign-in."
+          },
+          "response": []
+        },
+        {
+          "id": "08bbafcc-3e89-577d-a97a-c75c37b6ea3e",
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.expect(pm.response.code).to.eql(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{appOrigin}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Ends the session: the cookie is cleared and every access token issued for it stops working at once.\n\n**Needs:** the `fekra_session` cookie and an `Origin` header equal to `APP_ORIGIN` (the `appOrigin` variable). Returns `204`."
           },
           "response": []
         }
@@ -480,10 +562,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "pm.test('Status is 201', () => pm.expect(pm.response.code).to.eql(201));",
                   "const json = pm.response.json();",
-                  "const id = json.id || json._id || (json.data && (json.data.id || json.data._id));",
-                  "if (id) { pm.collectionVariables.set('clientId', id); console.log('clientId saved:', id); }"
+                  "pm.test('Starts at version 1 and never returns the token', () => {",
+                  "  pm.expect(json.version).to.eql(1);",
+                  "  pm.expect(JSON.stringify(json)).to.not.include('accessToken');",
+                  "});",
+                  "if (json.id) { pm.collectionVariables.set('clientId', json.id); pm.collectionVariables.set('resourceId', json.id); }"
                 ]
               }
             }
@@ -499,7 +584,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Acme Coffee\",\n  \"email\": \"owner@acmecoffee.com\"\n}",
+              "raw": "{\n  \"name\": \"Acme Coffee\",\n  \"businessCategory\": \"Coffee shop\",\n  \"fbPageId\": \"100000000001\",\n  \"instaAccountId\": null,\n  \"brandLogo\": \"https://example.com/logo.png\",\n  \"accessToken\": \"EXAMPLE-TOKEN-REPLACE-ME\",\n  \"aiConfig\": { \"language\": \"ARABIC\" },\n  \"dmReplyConfig\": { \"enabled\": true, \"likes_enabled\": false, \"replies\": [\"Thanks, we sent you a message\"] },\n  \"commentReplyConfig\": {\n    \"enabled\": false,\n    \"likes_enabled\": false,\n    \"inquiry_can_dm\": [],\n    \"inquiry_can_not_dm\": [],\n    \"engagement\": []\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -515,7 +600,7 @@
                 "clients"
               ]
             },
-            "description": "Creates a client.\n\n**Body:** `CreateClientDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+            "description": "Creates a client. **Requires:** `ADMIN` role (403 otherwise).\n\n**Body:** `CreateClientDto`. `accessToken` is plaintext in and stored encrypted; it is never returned.\n\n**Responses**\n- `201` the client, `version: 1`. A `CREATED` activity entry is recorded.\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` (`fbPageId` or `instaAccountId`) when that account already belongs to another client. Nothing is created.\n- `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, missing token, private-message replies on with no message.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
           },
           "response": []
         },
@@ -557,13 +642,13 @@
                 },
                 {
                   "key": "search",
-                  "value": "",
-                  "description": "Free-text search",
+                  "value": "cafe",
+                  "description": "Matches business name or category, ignoring case (1-100 characters)",
                   "disabled": true
                 }
               ]
             },
-            "description": "Lists clients.\n\n**Query:** `QueryClientDto`"
+            "description": "Lists clients.\n\n**Requires:** `ADMIN` role.\n\n**Query:** `QueryClientDto`: `page`, `limit`, `orderBy` (`name`, `businessCategory`, `createdAt`), `orderDir`, and `search` (1 to 100 characters, matches name or category ignoring case; `%` and `_` are literal)."
           },
           "response": []
         },
@@ -613,7 +698,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                  "pm.test('Status is one of [200, 409]', () => pm.expect([200, 409]).to.include(pm.response.code));"
                 ]
               }
             }
@@ -629,7 +714,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Acme Coffee Roasters\"\n}",
+              "raw": "{\n  \"version\": 1,\n  \"name\": \"Acme Coffee Roasters\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -652,7 +737,7 @@
                 }
               ]
             },
-            "description": "Partially updates a client.\n\n**Body:** `UpdateClientDto`\n\n> **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema."
+            "description": "Updates a client. **Requires:** `ADMIN` role.\n\n**Body:** `UpdateClientDto`. `version` is required: send the version you loaded. Any other field is optional; only send what changed.\n\n**`accessToken` is no longer accepted here** (422). Use *Set Client Access Token*.\n\n**Responses**\n- `200` the updated client with `version` + 1 and an `UPDATED` activity entry listing the changed field names. Identical values change nothing (version stays).\n- `409` `CLIENT_VERSION_CONFLICT` when `version` is stale: `details` has `currentVersion`, `updatedAt` and `updatedBy` (who saved last).\n\n  ```json\n  { \"statusCode\": 409, \"errorCode\": \"CLIENT_VERSION_CONFLICT\",\n    \"details\": { \"currentVersion\": 4, \"updatedAt\": \"2026-03-01T10:30:00.000Z\", \"updatedBy\": { \"id\": \"…\", \"name\": \"Sara\" } } }\n  ```\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` when the account id belongs to another client.\n- `404` unknown client, `422` invalid body or missing `version`."
           },
           "response": []
         },
@@ -665,7 +750,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                  "pm.test('Status is one of [200, 404]', () => pm.expect([200, 404]).to.include(pm.response.code));"
                 ]
               }
             }
@@ -689,7 +774,7 @@
                 }
               ]
             },
-            "description": "Deletes a client."
+            "description": "Permanently deletes a client. **Requires:** `ADMIN` role.\n\nIts business info, services and offers are deleted with it; users linked to it are unlinked (`clientId` becomes null). A `DELETED` activity entry with the client's name is kept. A second delete returns `404`."
           },
           "response": []
         },
@@ -702,7 +787,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is one of [200, 204]', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                  "pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));"
                 ]
               }
             }
@@ -718,7 +803,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"EAAG...page-access-token\"\n}",
+              "raw": "{\n  \"token\": \"EXAMPLE-TOKEN-REPLACE-ME\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -742,7 +827,7 @@
                 }
               ]
             },
-            "description": "Stores the client's access token (e.g. a Meta page/Instagram token).\n\n**Requires:** `ADMIN` role (returns 403 otherwise).\n\n**Body:** `{ \"token\": string }`"
+            "description": "Replaces the client's access token (write-only). **Requires:** `ADMIN` role.\n\n**Body:** `{ \"token\": string }`, 1 to 4096 characters after trimming. An empty token returns `422`; an unknown client `404`.\n\nThe response body is empty and the token is never returned by any endpoint. The client's `version` does **not** change. An `ACCESS_TOKEN_REPLACED` activity entry is recorded without the value.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
           },
           "response": []
         }
@@ -2059,6 +2144,11 @@
     {
       "key": "userEmail",
       "value": "jane@example.com",
+      "type": "string"
+    },
+    {
+      "key": "appOrigin",
+      "value": "http://localhost:5173",
       "type": "string"
     },
     {

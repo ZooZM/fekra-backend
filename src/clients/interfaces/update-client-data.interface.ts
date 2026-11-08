@@ -1,5 +1,4 @@
 import { UpdateClientInput } from '../schemas/client.schema';
 
-export type UpdateClientData = Omit<UpdateClientInput, 'accessToken'> & {
-  accessToken?: string;
-};
+/** What the repository stores on an edit: no token (own endpoint) and no version (checked apart). */
+export type UpdateClientData = Omit<UpdateClientInput, 'version'>;

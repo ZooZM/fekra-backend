@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   IClientsRepository,
   CLIENTS_REPOSITORY,
@@ -6,7 +11,11 @@ import {
 import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { TokenCryptoService } from '@app/crypto/token-crypto.service';
 import { CreateClientInput, UpdateClientInput } from './schemas/client.schema';
-import { ClientRecord, ClientWorkflowData } from './types/client.types';
+import {
+  ClientActor,
+  ClientRecord,
+  ClientWorkflowData,
+} from './types/client.types';
 import { randomUUID } from 'crypto';
 import { QueryClientInput } from './schemas/query-client.schema';
 
@@ -17,14 +26,17 @@ export class ClientsService {
     @Inject(CLIENTS_REPOSITORY) private readonly repo: IClientsRepository,
   ) {}
 
-  create(input: CreateClientInput): Promise<ClientRecord> {
+  async create(
+    input: CreateClientInput,
+    actor: ClientActor,
+  ): Promise<ClientRecord> {
+    await this.assertAccountsFree(input);
     const { accessToken, ...rest } = input;
     const id = randomUUID(); // generated first: it's the AAD for the encryption
-    return this.repo.create({
-      ...rest,
-      id,
-      accessToken: this.crypto.encrypt(accessToken, id),
-    });
+    return this.repo.create(
+      { ...rest, id, accessToken: this.crypto.encrypt(accessToken, id) },
+      actor,
+    );
   }
 
   findAll(query: QueryClientInput): Promise<PaginatedResult<ClientRecord>> {
@@ -37,16 +49,30 @@ export class ClientsService {
     return client;
   }
 
-  update(id: string, input: UpdateClientInput): Promise<ClientRecord> {
-    const { accessToken, ...rest } = input;
-    return this.repo.update(id, {
-      ...rest,
-      ...(accessToken && { accessToken: this.crypto.encrypt(accessToken, id) }),
-    });
+  async update(
+    id: string,
+    input: UpdateClientInput,
+    actor: ClientActor,
+  ): Promise<ClientRecord> {
+    const { version, ...data } = input;
+    await this.assertAccountsFree(data, id);
+    const result = await this.repo.update(id, data, version, actor);
+    if (!result) throw new NotFoundException('Client not found');
+    if (result.status === 'conflict') {
+      const { currentVersion, updatedAt, updatedBy } = result;
+      throw new ConflictException({
+        message: 'Client was changed by someone else',
+        errorCode: 'CLIENT_VERSION_CONFLICT',
+        details: { currentVersion, updatedAt, updatedBy },
+      });
+    }
+    return result.record;
   }
 
-  remove(id: string): Promise<void> {
-    return this.repo.delete(id);
+  async remove(id: string, actor: ClientActor): Promise<void> {
+    if (!(await this.repo.delete(id, actor))) {
+      throw new NotFoundException('Client not found');
+    }
   }
 
   /** Null when there's no match, so webhook code can drop the event. Throw a 404 in a controller if an endpoint needs one. */
@@ -56,15 +82,38 @@ export class ClientsService {
     return this.repo.getClientDataForWorkFlow(brandId);
   }
 
-  async setAccessToken(clientId: string, token: string): Promise<void> {
-    await this.repo.setAccessToken(
+  async setAccessToken(
+    clientId: string,
+    token: string,
+    actor: ClientActor,
+  ): Promise<void> {
+    const stored = await this.repo.setAccessToken(
       clientId,
       this.crypto.encrypt(token, clientId),
+      actor,
     );
+    if (!stored) throw new NotFoundException('Client not found');
   }
 
   async getAccessToken(clientId: string): Promise<string | null> {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
+  }
+  /** A Facebook page / Instagram account can belong to one client only (webhooks match on it). */
+  private async assertAccountsFree(
+    ids: { fbPageId?: string | null; instaAccountId?: string | null },
+    excludeId?: string,
+  ): Promise<void> {
+    const field = await this.repo.findMetaAccountConflict(
+      { fbPageId: ids.fbPageId, instaAccountId: ids.instaAccountId },
+      excludeId,
+    );
+    if (field) {
+      throw new ConflictException({
+        message: 'Account already connected to another client',
+        errorCode: 'DUPLICATE_KEY_ERROR',
+        details: { field },
+      });
+    }
   }
 }

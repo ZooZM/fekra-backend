@@ -1,5 +1,5 @@
 // inbox/inbox.constants.ts
-export const REDIS = 'REDIS';
+export { REDIS } from '../redis/redis.constants';
 export const REDIS_SUB = 'REDIS_SUB';
 
 export const MESSAGE_QUEUE_KEY = 'inbox:messages'; // messages and finished DM batches

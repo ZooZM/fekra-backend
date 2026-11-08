@@ -1,0 +1,62 @@
+name: Deploy
+
+# Runs after CI succeeded on main. It deploys the images CI published for that exact commit
+# (github.event.workflow_run.head_sha) and never builds anything itself.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # a running deploy finishes; the next one waits
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check that CI published both images for this commit
+        id: images
+        run: |
+          set -euo pipefail
+          for name in fekra-api fekra-api-migrate; do
+            digest="$(gcloud artifacts docker images describe "$REGISTRY/$name:$SHA" \
+              --format='value(image_summary.digest)')"
+            [ -n "$digest" ] || { echo "No image $name:$SHA. Did CI publish it?" >&2; exit 1; }
+            echo "${name//-/_}=$REGISTRY/$name@$digest" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Copy the VM files
+        run: |
+          gcloud compute scp --recurse deploy "${{ vars.VM_NAME }}:/opt/fekra/" \
+            --zone "${{ vars.VM_ZONE }}" --tunnel-through-iap --quiet
+
+      - name: Deploy over IAP
+        run: |
+          gcloud compute ssh "${{ vars.VM_NAME }}" --zone "${{ vars.VM_ZONE }}" \
+            --tunnel-through-iap --quiet --command \
+            "bash /opt/fekra/deploy/remote-deploy.sh api '${{ steps.images.outputs.fekra_api }}' '${{ steps.images.outputs.fekra_api_migrate }}'"

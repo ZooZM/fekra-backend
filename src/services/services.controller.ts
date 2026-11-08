@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   Query,
@@ -11,10 +10,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ServicesService } from './services.service';
-import {
-  CreateServiceDto,
-  UpdateServiceDto,
-} from './schemas/service.schema';
+import { CreateServiceDto, UpdateServiceDto } from './schemas/service.schema';
 import { QueryServiceDto } from './schemas/query-service.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 

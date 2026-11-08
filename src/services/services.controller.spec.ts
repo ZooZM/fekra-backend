@@ -7,7 +7,10 @@ describe('ServicesController', () => {
 
   beforeEach(() => {
     service = Object.fromEntries(
-      ['create', 'findAll', 'findById', 'update', 'remove'].map((name) => [name, jest.fn()]),
+      ['create', 'findAll', 'findById', 'update', 'remove'].map((name) => [
+        name,
+        jest.fn(),
+      ]),
     );
     controller = new ServicesController(service as unknown as ServicesService);
   });

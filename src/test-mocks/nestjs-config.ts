@@ -1,5 +1,5 @@
 export class ConfigService {
-  get<T>(key: string): T | undefined {
+  get<T>(_key: string): T | undefined {
     return undefined;
   }
 

@@ -7,9 +7,7 @@ import {
 } from '@common/zod/json-readers';
 import { BusinessInfoRecord } from '../interfaces/business-info.interface';
 
-export function toBusinessInfoRecord(
-  row: BusinessInfo
-): BusinessInfoRecord {
+export function toBusinessInfoRecord(row: BusinessInfo): BusinessInfoRecord {
   return {
     ...row,
     location: readLocation(row.location),

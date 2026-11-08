@@ -1,17 +1,28 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, Client } from '@app/generated/prisma/client';
+import {
+  Prisma,
+  Client,
+  ClientActivityAction,
+} from '@app/generated/prisma/client';
 import { PrismaService } from '@app/prisma/prisma.service';
-import { BaseQueryDto } from '@app/common/dto/query-base.dto';
 import {
   paginate,
   PaginatedResult,
 } from '@app/common/helpers/pagination.helper';
+import { escapeLike } from '@app/common/helpers/escape-like';
 import { IClientsRepository } from './IClientsRepository.repository';
 import { CreateClientData } from '../interfaces/create-client-data.interface';
 import { UpdateClientData } from '../interfaces/update-client-data.interface';
-import { ClientRecord, ClientWorkflowData } from '../types/client.types';
+import {
+  AccountField,
+  ClientActor,
+  ClientRecord,
+  ClientUpdateResult,
+  ClientWorkflowData,
+} from '../types/client.types';
 import { toClientRecord, toWorkflowData } from '../mappers/client.mapper';
 import { QueryClientInput } from '../schemas/query-client.schema';
+import { changedFields } from '../helpers/changed-fields';
 
 @Injectable()
 export class ClientsRepository implements IClientsRepository {
@@ -22,13 +33,24 @@ export class ClientsRepository implements IClientsRepository {
   async findAll(
     query: QueryClientInput,
   ): Promise<PaginatedResult<ClientRecord>> {
+    // the same filter feeds the page and the total, so the count matches the search
+    const search = query.search ? escapeLike(query.search) : undefined;
+    const where: Prisma.ClientWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { businessCategory: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.client.findMany({
+        where,
         orderBy: [{ [query.orderBy]: query.orderDir }, { id: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
-      this.prisma.client.count(),
+      this.prisma.client.count({ where }),
     ]);
     return paginate(rows.map(toClientRecord), total, query.page, query.limit);
   }
@@ -38,14 +60,83 @@ export class ClientsRepository implements IClientsRepository {
     return row ? toClientRecord(row) : null;
   }
 
-  async create(data: CreateClientData): Promise<ClientRecord> {
-    return toClientRecord(await this.prisma.client.create({ data }));
+  async create(
+    data: CreateClientData,
+    actor: ClientActor,
+  ): Promise<ClientRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.client.create({ data });
+      await this.recordActivity(tx, {
+        action: 'CREATED',
+        clientId: row.id,
+        clientName: row.name,
+        actor,
+      });
+      return toClientRecord(row);
+    });
   }
 
-  async update(id: string, data: UpdateClientData): Promise<ClientRecord> {
-    return toClientRecord(
-      await this.prisma.client.update({ where: { id }, data }),
-    );
+  async update(
+    id: string,
+    data: UpdateClientData,
+    expectedVersion: number,
+    actor: ClientActor,
+  ): Promise<ClientUpdateResult | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.client.findUnique({ where: { id } });
+      if (!current) return null;
+      if (current.version !== expectedVersion) {
+        return this.conflict(tx, current);
+      }
+
+      const fields = changedFields(current, data);
+      if (fields.length === 0) {
+        return { status: 'unchanged', record: toClientRecord(current) };
+      }
+
+      // the version in the where clause makes this a compare-and-swap: a concurrent save
+      // that slipped in after the read above leaves no row to update (P2025)
+      let row: Client;
+      try {
+        row = await tx.client.update({
+          where: { id, version: expectedVersion },
+          data: { ...data, version: { increment: 1 } },
+        });
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2025'
+        ) {
+          const latest = await tx.client.findUnique({ where: { id } });
+          return latest ? this.conflict(tx, latest) : null;
+        }
+        throw e;
+      }
+      await this.recordActivity(tx, {
+        action: 'UPDATED',
+        clientId: id,
+        clientName: row.name,
+        actor,
+        changedFields: fields,
+      });
+      return { status: 'updated', record: toClientRecord(row) };
+    });
+  }
+
+  async findMetaAccountConflict(
+    ids: { fbPageId?: string | null; instaAccountId?: string | null },
+    excludeId?: string,
+  ): Promise<AccountField | null> {
+    for (const field of ['fbPageId', 'instaAccountId'] as const) {
+      const value = ids[field];
+      if (!value) continue;
+      const hit = await this.prisma.client.findFirst({
+        where: { [field]: value, ...(excludeId && { id: { not: excludeId } }) },
+        select: { id: true },
+      });
+      if (hit) return field;
+    }
+    return null;
   }
 
   async getClientDataForWorkFlow(
@@ -74,18 +165,89 @@ export class ClientsRepository implements IClientsRepository {
     return row?.accessToken ?? null;
   }
 
-  async setAccessToken(clientId: string, token: string): Promise<void> {
-    await this.prisma.client.update({
-      where: { id: clientId },
-      data: { accessToken: token },
+  async setAccessToken(
+    clientId: string,
+    token: string,
+    actor: ClientActor,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.findUnique({
+        where: { id: clientId },
+        select: { name: true },
+      });
+      if (!client) return false;
+      // the token is not part of the edit version, so replacing it never causes a conflict
+      await tx.client.update({
+        where: { id: clientId },
+        data: { accessToken: token },
+      });
+      await this.recordActivity(tx, {
+        action: 'ACCESS_TOKEN_REPLACED',
+        clientId,
+        clientName: client.name,
+        actor,
+      });
+      return true;
     });
   }
 
-  async delete(id: string): Promise<void> {
-    const res = await this.prisma.client.delete({
-      where: { id },
+  async delete(id: string, actor: ClientActor): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const client = await tx.client.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      if (!client) return false;
+      await tx.client.delete({ where: { id } });
+      await this.recordActivity(tx, {
+        action: 'DELETED',
+        clientId: id,
+        clientName: client.name,
+        actor,
+      });
+      this.logger.debug(`delete(${id})`);
+      return true;
     });
+  }
 
-    this.logger.debug(`delete(${id}), deletedClient(${res})`);
+  /** Who changed the client last, for the "someone else changed this" message. */
+  private async conflict(
+    tx: Prisma.TransactionClient,
+    current: Client,
+  ): Promise<ClientUpdateResult> {
+    const last = await tx.clientActivity.findFirst({
+      where: { clientId: current.id },
+      orderBy: { createdAt: 'desc' },
+      select: { actorId: true, actorName: true },
+    });
+    return {
+      status: 'conflict',
+      currentVersion: current.version,
+      updatedAt: current.updatedAt,
+      updatedBy: last ? { id: last.actorId, name: last.actorName } : null,
+    };
+  }
+
+  private async recordActivity(
+    tx: Prisma.TransactionClient,
+    entry: {
+      action: ClientActivityAction;
+      clientId: string;
+      clientName: string;
+      actor: ClientActor;
+      changedFields?: string[];
+    },
+  ): Promise<void> {
+    await tx.clientActivity.create({
+      data: {
+        action: entry.action,
+        clientId: entry.clientId,
+        clientName: entry.clientName,
+        actorId: entry.actor.id,
+        actorName: entry.actor.name,
+        actorEmail: entry.actor.email,
+        changedFields: entry.changedFields ?? [],
+      },
+    });
   }
 }
