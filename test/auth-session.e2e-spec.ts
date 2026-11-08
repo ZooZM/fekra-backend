@@ -8,6 +8,7 @@ import {
   createUser,
   flushLoginFailures,
   login,
+  PASSWORD,
   resetDb,
 } from './utils/e2e-app';
 
@@ -106,6 +107,55 @@ describe('Sessions and sign-in throttling (e2e)', () => {
       await refresh(cookie).expect(200);
       const [row] = await prisma.refreshToken.findMany();
       expect(Date.now() - row.lastUsedAt.getTime()).toBeLessThan(5_000);
+    });
+
+    describe('with SESSION_IDLE_MINUTES=0 and SESSION_MAX_HOURS=0 (no limits)', () => {
+      beforeEach(() => {
+        process.env.SESSION_IDLE_MINUTES = '0';
+        process.env.SESSION_MAX_HOURS = '0';
+      });
+      afterEach(() => {
+        process.env.SESSION_IDLE_MINUTES = '30';
+        process.env.SESSION_MAX_HOURS = '12';
+      });
+
+      it('stays signed in after a month without use, and the cookie is renewed', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/auth/login')
+          .send({ email, password: PASSWORD })
+          .expect(201);
+        expect(
+          (res.body as { idleTimeoutMinutes?: number }).idleTimeoutMinutes,
+        ).toBeUndefined();
+        const cookies = res.headers['set-cookie'] as unknown as string[];
+        const cookie =
+          cookies.find((c) => c.startsWith('fekra_session=')) ?? '';
+        expect(cookie).toContain(`Max-Age=${400 * 24 * 3600}`); // the most browsers keep
+
+        await prisma.refreshToken.updateMany({
+          data: { lastUsedAt: new Date(Date.now() - 30 * 24 * 3_600_000) },
+        });
+        const again = await refresh(cookie.split(';')[0]).expect(200);
+        expect(
+          (again.body as { idleTimeoutMinutes?: number }).idleTimeoutMinutes,
+        ).toBeUndefined();
+        expect(String(again.headers['set-cookie'])).toContain(
+          `Max-Age=${400 * 24 * 3600}`,
+        );
+        // the new access token works
+        await me((again.body as { token: string }).token).expect(200);
+      });
+
+      it('still ends at sign-out', async () => {
+        const { cookie, token } = await login(app, email);
+        await request(app.getHttpServer())
+          .post('/auth/logout')
+          .set('Cookie', cookie)
+          .set('Origin', APP_ORIGIN)
+          .expect(204);
+        await refresh(cookie).expect(401);
+        await me(token).expect(401);
+      });
     });
 
     it('refuses refresh and access tokens after the 12 hour limit', async () => {

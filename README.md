@@ -179,6 +179,8 @@ TOKEN_ENCRYPTION_KEY=<openssl rand -hex 32>               # losing it makes stor
 APP_ORIGIN=https://app.example.com
 CORS_ORIGINS=                                             # empty: the dashboard is same-origin
 SESSION_COOKIE_PATH=/api/auth                             # the path the browser sees behind Caddy
+SESSION_IDLE_MINUTES=30                                   # 0 = never sign out for inactivity
+SESSION_MAX_HOURS=12                                      # 0 = no absolute limit (stay signed in until sign-out)
 OPENAPI_ENABLED=false
 # plus the Meta, Gemini and n8n values from .env.example
 ```

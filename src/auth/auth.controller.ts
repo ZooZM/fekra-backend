@@ -18,7 +18,7 @@ import { SessionService } from './session.service';
 import { LocalGuard } from './guards/local.guard';
 import { OriginGuard } from './guards/origin.guard';
 import { RegisterUserDto } from './schemas/auth.schema';
-import { SESSION_COOKIE } from './consts/session.constants';
+import { MAX_COOKIE_AGE_MS, SESSION_COOKIE } from './consts/session.constants';
 
 @Controller('auth')
 export class AuthController {
@@ -54,9 +54,9 @@ export class AuthController {
     res.cookie(
       SESSION_COOKIE,
       session.cookieValue,
-      this.cookieOptions(session.expiresAt.getTime() - Date.now()),
+      this.cookieOptions(this.cookieAge(session.expiresAt)),
     );
-    return { user, token };
+    return { user, token, ...this.sessions.policy };
   }
 
   /** New access token from the session cookie; extends the idle window. */
@@ -69,14 +69,22 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     try {
-      const session = await this.sessions.refresh(this.sessionCookie(request));
+      const cookieValue = this.sessionCookie(request);
+      const session = await this.sessions.refresh(cookieValue);
+      // renewed on every refresh: a session without a time limit stays signed in for as long
+      // as it is used, even though browsers cap how long a cookie can live
+      res.cookie(
+        SESSION_COOKIE,
+        cookieValue as string,
+        this.cookieOptions(this.cookieAge(session.expiresAt)),
+      );
       const user = await this.users.findById(session.userId);
       const token = await this.authService.generateJwt({
         sub: user.id,
         userRoles: user.roles,
         sid: session.sessionId,
       });
-      return { user, token };
+      return { user, token, ...this.sessions.policy };
     } catch (err) {
       res.clearCookie(SESSION_COOKIE, this.cookieOptions());
       // a deleted user is the same as an expired session for the browser
@@ -98,6 +106,10 @@ export class AuthController {
   ): Promise<void> {
     await this.sessions.revoke(this.sessionCookie(request));
     res.clearCookie(SESSION_COOKIE, this.cookieOptions());
+  }
+
+  private cookieAge(expiresAt: Date): number {
+    return Math.min(expiresAt.getTime() - Date.now(), MAX_COOKIE_AGE_MS);
   }
 
   private sessionCookie(request: Request): string | undefined {

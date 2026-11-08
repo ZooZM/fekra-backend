@@ -29,7 +29,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U fekra -d fekra]
+      # Over TCP: on a fresh volume the init server listens on the unix socket only, so a
+      # socket check passes before the real server accepts the connections migrate makes.
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U fekra -d fekra]
       interval: 5s
       timeout: 3s
       retries: 20

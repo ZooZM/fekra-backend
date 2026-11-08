@@ -17,6 +17,8 @@ export const AuthSessionSchema = z.object({
   user: SafeUserSchema,
   // access token: keep it in memory only, never in browser storage
   token: z.string(),
+  // minutes without activity before the dashboard signs out; absent when there is no such limit
+  idleTimeoutMinutes: z.number().int().positive().optional(),
 });
 
 export class AuthSessionDto extends createZodDto(AuthSessionSchema) {}

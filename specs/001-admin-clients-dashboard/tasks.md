@@ -663,3 +663,10 @@ already deployed.
 - **Not done: T126.** The automated pipelines were run (results in `checklists/requirements.md`).
   Manual rows that need a person (SC-001 usability timing) or a clean production-like setup
   (log search in the API container) were not run.
+- **Sessions can be unlimited.** `SESSION_IDLE_MINUTES=0` and `SESSION_MAX_HOURS=0` remove the
+  inactivity and absolute limits (spec FR-003 describes the defaults, 30 minutes and 12 hours,
+  which still apply when the variables are unset). The session cookie is then renewed on every
+  refresh for up to 400 days (the most browsers keep), and the server tells the dashboard its
+  policy (`idleTimeoutMinutes`, absent when there is no limit) so the dashboard's own idle
+  sign-out follows it. Sign-out still ends the session at once. The 10-minute access token is
+  unchanged: it is renewed silently from the cookie.

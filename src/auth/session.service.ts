@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_SESSION_IDLE_MINUTES,
   DEFAULT_SESSION_MAX_HOURS,
+  UNLIMITED_SESSION_MS,
 } from './consts/session.constants';
 
 const sha256 = (value: string) =>
@@ -24,6 +25,7 @@ const sessionExpired = () =>
  * Server-side sign-in sessions. The browser holds an opaque random value in an httpOnly
  * cookie; only its SHA-256 hash is stored. A session ends after `SESSION_IDLE_MINUTES`
  * without a refresh, after `SESSION_MAX_HOURS` in all cases, or when revoked at sign-out.
+ * Setting either variable to 0 removes that limit (0 for both: signed in until sign-out).
  */
 @Injectable()
 export class SessionService {
@@ -32,19 +34,50 @@ export class SessionService {
     private readonly config: ConfigService,
   ) {}
 
-  private get idleMs(): number {
-    const minutes = Number(this.config.get('SESSION_IDLE_MINUTES'));
-    return (minutes > 0 ? minutes : DEFAULT_SESSION_IDLE_MINUTES) * 60_000;
+  /** null = no limit. Unset or invalid falls back to the default; an explicit 0 means none. */
+  private limitMs(
+    key: string,
+    unitMs: number,
+    fallback: number,
+  ): number | null {
+    const raw = this.config.get<string | number>(key);
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return fallback * unitMs;
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return fallback * unitMs;
+    return value === 0 ? null : value * unitMs;
   }
 
-  private get maxMs(): number {
-    const hours = Number(this.config.get('SESSION_MAX_HOURS'));
-    return (hours > 0 ? hours : DEFAULT_SESSION_MAX_HOURS) * 3_600_000;
+  private get idleMs(): number | null {
+    return this.limitMs(
+      'SESSION_IDLE_MINUTES',
+      60_000,
+      DEFAULT_SESSION_IDLE_MINUTES,
+    );
+  }
+
+  private get maxMs(): number | null {
+    return this.limitMs(
+      'SESSION_MAX_HOURS',
+      3_600_000,
+      DEFAULT_SESSION_MAX_HOURS,
+    );
+  }
+
+  /** What the dashboard needs to follow: minutes of inactivity before it signs out, if any. */
+  get policy(): { idleTimeoutMinutes?: number } {
+    const idle = this.idleMs;
+    return idle === null
+      ? {}
+      : { idleTimeoutMinutes: Math.round(idle / 60_000) };
   }
 
   async start(userId: string) {
     const cookieValue = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + this.maxMs);
+    const expiresAt = new Date(
+      Date.now() + (this.maxMs ?? UNLIMITED_SESSION_MS),
+    );
     const { id } = await this.repo.create({
       userId,
       tokenHash: sha256(cookieValue),
@@ -61,7 +94,8 @@ export class SessionService {
 
     const now = Date.now();
     if (now >= session.expiresAt.getTime()) throw sessionExpired();
-    if (now - session.lastUsedAt.getTime() >= this.idleMs) {
+    const idleMs = this.idleMs;
+    if (idleMs !== null && now - session.lastUsedAt.getTime() >= idleMs) {
       throw sessionExpired();
     }
 
