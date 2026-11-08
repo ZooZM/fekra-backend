@@ -29,6 +29,12 @@ export class ClientsRepository implements IClientsRepository {
   private readonly logger = new Logger(ClientsRepository.name);
 
   constructor(private readonly prisma: PrismaService) {}
+  async findByAccountId(accountId: string): Promise<ClientRecord | null> {
+    const row = await this.prisma.client.findFirst({
+      where: { OR: [{ fbPageId: accountId }, { instaAccountId: accountId }] },
+    });
+    return row ? toClientRecord(row) : null;
+  }
 
   async findAll(
     query: QueryClientInput,

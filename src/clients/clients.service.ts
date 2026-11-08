@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -18,12 +19,18 @@ import {
 } from './types/client.types';
 import { randomUUID } from 'crypto';
 import { QueryClientInput } from './schemas/query-client.schema';
+import { GraphApiService, Platform } from '@app/inbox/graph-api.service';
+import { CommentBackfillService } from '@app/inbox/comment-backfill.service';
+import { FacebookComment } from './types/facebook-comment.types';
 
 @Injectable()
 export class ClientsService {
   constructor(
     private readonly crypto: TokenCryptoService,
     @Inject(CLIENTS_REPOSITORY) private readonly repo: IClientsRepository,
+    private readonly graph: GraphApiService,
+    @Inject(forwardRef(() => CommentBackfillService))
+    private readonly commentBackfill: CommentBackfillService,
   ) {}
 
   async create(
@@ -115,5 +122,47 @@ export class ClientsService {
         details: { field },
       });
     }
+  }
+
+  async getAllPosts(accountId: string): Promise<unknown[]> {
+    const client = await this.repo.findByAccountId(accountId);
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    const platform: Platform =
+      client.fbPageId === accountId ? 'facebook' : 'instagram';
+
+    const base = this.graph.host(platform);
+
+    const urlPath = platform === 'facebook' ? 'posts' : 'media';
+
+    const params = new URLSearchParams({
+      // fields: 'id',
+      limit: '100',
+    });
+
+    const url = `${base}/${client.fbPageId}/${urlPath}?${params.toString()}`;
+    const token = await this.getAccessToken(client.id);
+    if (!token) throw new NotFoundException('Client not found');
+    const response = await this.graph.get<{ data: unknown[] }>(url, token);
+
+    const posts = response.data.map((post) => post);
+
+    return posts;
+  }
+
+  async replyToPost(accountId: string, postId: string) {
+    const client = await this.repo.findByAccountId(accountId);
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    return this.commentBackfill.start({
+      accountId,
+      postId,
+    });
   }
 }

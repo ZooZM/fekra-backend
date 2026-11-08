@@ -1,5 +1,5 @@
 // inbox/message-sender.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientsService } from '@app/clients/clients.service';
 import {
   GraphApiService,
@@ -15,6 +15,7 @@ export class MessageSenderService {
 
   constructor(
     private readonly graph: GraphApiService,
+    @Inject(forwardRef(() => ClientsService))
     private readonly clients: ClientsService,
   ) {}
 

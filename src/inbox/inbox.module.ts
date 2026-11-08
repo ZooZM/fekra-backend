@@ -1,5 +1,5 @@
 // inbox/inbox.module.ts
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { redisProviders } from './redis.provider';
 import { PriorityInboxService } from './priority-inbox.service';
 import { DmBufferService } from './dm-buffer.service';
@@ -8,16 +8,16 @@ import { ExpiryService } from './expiry.service';
 import { N8nCallbackController } from './n8n-callback.controller';
 import { ClientsModule } from '@app/clients/clients.module';
 import { MessageSenderService } from './message-sender.service';
-import { GraphApiService } from './graph-api.service';
 import { CommentReplyService } from './comment-reply.service';
 import { AttachmentHandlerService } from './attachment-handler.service';
 import { CommentClassifierService } from './comment-classifier.service';
 import { CommentLlmClassifierService } from './comment-llm-classifier.service';
 import { CommentBackfillService } from './comment-backfill.service';
 import { CommentBackfillController } from './comment-backfill.controller';
+import { GraphApiModule } from './graph-api.module';
 
 @Module({
-  imports: [ClientsModule],
+  imports: [forwardRef(() => ClientsModule), GraphApiModule],
   controllers: [N8nCallbackController, CommentBackfillController],
   providers: [
     ...redisProviders,
@@ -25,7 +25,6 @@ import { CommentBackfillController } from './comment-backfill.controller';
     DmBufferService,
     N8nDeliveryService,
     ExpiryService,
-    GraphApiService,
     MessageSenderService,
     CommentReplyService,
     AttachmentHandlerService,
@@ -33,6 +32,6 @@ import { CommentBackfillController } from './comment-backfill.controller';
     CommentLlmClassifierService,
     CommentBackfillService,
   ],
-  exports: [PriorityInboxService],
+  exports: [PriorityInboxService, CommentBackfillService],
 })
 export class InboxModule {}

@@ -3,6 +3,8 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -79,6 +81,7 @@ export class CommentBackfillService implements OnModuleDestroy {
 
   constructor(
     private readonly graph: GraphApiService,
+    @Inject(forwardRef(() => ClientsService))
     private readonly clients: ClientsService,
     private readonly inbox: PriorityInboxService,
     private readonly config: ConfigService,

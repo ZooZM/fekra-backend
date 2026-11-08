@@ -1,5 +1,5 @@
 // inbox/comment-reply.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientsService } from '@app/clients/clients.service';
 import {
   CommentReplyConfig,
@@ -67,6 +67,7 @@ export class CommentReplyService {
 
   constructor(
     private readonly graph: GraphApiService,
+    @Inject(forwardRef(() => ClientsService))
     private readonly clients: ClientsService,
   ) {}
 

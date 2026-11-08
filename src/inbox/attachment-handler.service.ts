@@ -1,5 +1,5 @@
 // inbox/attachment-handler.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ClientsService } from '@app/clients/clients.service';
 
@@ -43,7 +43,10 @@ export class AttachmentHandlerService {
   private readonly genAI = new GoogleGenerativeAI(
     process.env.GEMINI_API_KEY || '',
   );
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    @Inject(forwardRef(() => ClientsService))
+    private readonly clientsService: ClientsService,
+  ) {}
 
   private readonly IMAGE_SYSTEM_PROMPT = `
 You are the VISION STEP in an automated customer-service pipeline for a business that receives messages on Facebook, Instagram and WhatsApp.

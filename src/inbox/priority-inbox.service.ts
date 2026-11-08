@@ -1,5 +1,6 @@
 // inbox/priority-inbox.service.ts
 import {
+  forwardRef,
   Inject,
   Injectable,
   Logger,
@@ -33,6 +34,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly dmBuffer: DmBufferService,
     private readonly delivery: N8nDeliveryService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => ClientsService))
     private readonly clientsService: ClientsService,
     private readonly attachments: AttachmentHandlerService,
     private readonly commentClassifier: CommentClassifierService,

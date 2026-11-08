@@ -16,6 +16,7 @@ import { InboxModule } from './inbox/inbox.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AppZodValidationPipe } from './common/pipes/zod-validation.pipe';
+import { GraphApiModule } from './inbox/graph-api.module';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
@@ -45,6 +46,7 @@ function devModules() {
     OffersModule,
     InboxModule,
     MetaWebhookModule,
+    GraphApiModule,
     ...devModules(),
   ],
   controllers: [AppController],
