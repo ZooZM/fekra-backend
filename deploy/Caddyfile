@@ -14,3 +14,12 @@
 		reverse_proxy dashboard:8080
 	}
 }
+
+# Other sites hosted on the same VM (n8n, ...) are not part of this repository: one file per
+# site in /opt/fekra/caddy/ on the VM, mounted at /etc/caddy/sites/. They reach services that
+# publish a port on the VM through host.docker.internal, for example:
+#   n8n.example.com {
+#   	reverse_proxy host.docker.internal:5678
+#   }
+# An empty folder is fine: the import then matches nothing.
+import /etc/caddy/sites/*.caddy

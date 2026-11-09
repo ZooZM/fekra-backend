@@ -197,7 +197,7 @@ export class ClientsRepository implements IClientsRepository {
       });
 
       if (row) {
-        this.redis.set(
+        await this.redis.set(
           `client:workflow:${brandId}`,
           JSON.stringify(row),
           'EX',
@@ -319,8 +319,8 @@ export class ClientsRepository implements IClientsRepository {
         actorName: entry.actor.name,
         actorEmail: entry.actor.email,
         changedFields: entry.changedFields ?? [],
-        details: entry.details as Prisma.InputJsonValue | undefined,
-      } as Prisma.ClientActivityUncheckedCreateInput,
+        details: entry.details,
+      },
     });
   }
 }

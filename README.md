@@ -111,10 +111,10 @@ git push main ─▶ CI (lint, build, unit + e2e tests, openapi check)
 
 One public origin, served by Caddy (automatic HTTPS). Only Caddy publishes ports.
 
-| Path | Goes to |
-|---|---|
-| `/` | the dashboard (nginx, port 8080), from the `fekra-dashboard` repository |
-| `/api/*` | the API (port 3000), with the `/api` prefix removed |
+| Path     | Goes to                                                                 |
+| -------- | ----------------------------------------------------------------------- |
+| `/`      | the dashboard (nginx, port 8080), from the `fekra-dashboard` repository |
+| `/api/*` | the API (port 3000), with the `/api` prefix removed                     |
 
 Redis (and PostgreSQL, unless you use Cloud SQL) run on the same private compose network.
 The files are in [deploy/](deploy/): `compose.yml`, `Caddyfile`, `remote-deploy.sh`.
@@ -123,6 +123,19 @@ Change the Caddyfile in this repository and let the deploy copy it: the deploy r
 place. Do not edit it by hand on the VM with `sed -i` or an editor that saves by renaming the
 file: the container only sees in-place writes, so it would keep serving the old config.
 
+Other sites on the same VM (n8n, ...) stay out of this repository. Each one is a file in
+`/opt/fekra/caddy/` on the VM (for example `n8n.caddy`), imported by the Caddyfile. They reach
+services that publish a port on the VM through `host.docker.internal`:
+
+```
+n8n.example.com {
+	reverse_proxy host.docker.internal:5678
+}
+```
+
+That folder is mounted as a directory, so new and edited files are seen by the container. After a
+change, reload Caddy: `sudo docker exec fekra-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
+
 > **Meta webhook URL changes.** Behind the proxy the webhook is
 > `https://<host>/api/webhooks/meta` (it was `https://<host>/webhooks/meta`). Update the
 > callback URL in the Meta app settings when you switch.
@@ -130,6 +143,7 @@ file: the container only sees in-place writes, so it would keep serving the old 
 ### One-time setup
 
 **GCP**
+
 1. Create an Artifact Registry Docker repository.
 2. Create a service account for deployments with `roles/artifactregistry.writer`,
    `roles/compute.instanceAdmin.v1`, `roles/iap.tunnelResourceAccessor` and
@@ -142,6 +156,7 @@ file: the container only sees in-place writes, so it would keep serving the old 
    `gcloud auth configure-docker <region>-docker.pkg.dev`.
 
 **VM** (Docker with the compose plugin installed)
+
 ```bash
 sudo mkdir -p /opt/fekra/deploy && sudo chown -R "$USER" /opt/fekra
 printf 'DOMAIN=app.example.com\n' > /opt/fekra/deploy/.env      # no secrets in this file
@@ -150,13 +165,13 @@ install -m 600 /dev/null /opt/fekra/.env                          # application 
 
 **GitHub** (Settings → Secrets and variables → Actions → Variables; no secrets are needed here)
 
-| Variable | Example |
-|---|---|
-| `GCP_PROJECT_ID`, `GCP_REGION` | `my-project`, `europe-west1` |
-| `GAR_REPOSITORY` | Artifact Registry repository name |
-| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/github/providers/github` |
-| `GCP_SERVICE_ACCOUNT` | `deployer@my-project.iam.gserviceaccount.com` |
-| `VM_NAME`, `VM_ZONE` | `fekra-vm`, `europe-west1-b` |
+| Variable                       | Example                                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `GCP_PROJECT_ID`, `GCP_REGION` | `my-project`, `europe-west1`                                                  |
+| `GAR_REPOSITORY`               | Artifact Registry repository name                                             |
+| `GCP_WIF_PROVIDER`             | `projects/123/locations/global/workloadIdentityPools/github/providers/github` |
+| `GCP_SERVICE_ACCOUNT`          | `deployer@my-project.iam.gserviceaccount.com`                                 |
+| `VM_NAME`, `VM_ZONE`           | `fekra-vm`, `europe-west1-b`                                                  |
 
 Create an environment named `production` (Settings → Environments); add required reviewers if
 you want a manual approval before each deploy.
