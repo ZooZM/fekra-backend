@@ -20,7 +20,10 @@ export const FindOrCreateChatSchema = z
   });
 
 // ── Read: GET /chats ──
-export const QueryChatSchema = listQuery(['createdAt', 'updatedAt'], 'updatedAt').extend({
+export const QueryChatSchema = listQuery(
+  ['createdAt', 'updatedAt'],
+  'updatedAt',
+).extend({
   clientId: z.uuid().optional(), // admins only. Scope CLIENT users from their JWT in the service
   platform: platformField.optional(),
   senderId: externalId.optional(),

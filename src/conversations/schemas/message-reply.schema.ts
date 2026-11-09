@@ -24,7 +24,9 @@ export const QueryMessageReplySchema = listQuery(['createdAt'], 'createdAt')
   .extend({ ...dateRangeFields })
   .refine(rangeIsOrdered, RANGE_ERROR);
 
-export class QueryMessageReplyDto extends createZodDto(QueryMessageReplySchema) {}
+export class QueryMessageReplyDto extends createZodDto(
+  QueryMessageReplySchema,
+) {}
 
 export type CreateMessageReplyInput = z.infer<typeof CreateMessageReplySchema>;
 export type QueryMessageReplyInput = z.infer<typeof QueryMessageReplySchema>;
