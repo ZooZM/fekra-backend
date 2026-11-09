@@ -37,6 +37,9 @@ export interface IClientsRepository extends Omit<
   /** false: no such client. */
   delete(id: string, actor: ClientActor): Promise<boolean>;
 
+  /** Finds a client by its Facebook page or Instagram account id. */
+  findByAccountId(accountId: string): Promise<ClientRecord | null>;
+
   /** The first account id already used by another client, if any. */
   findMetaAccountConflict(
     ids: { fbPageId?: string | null; instaAccountId?: string | null },

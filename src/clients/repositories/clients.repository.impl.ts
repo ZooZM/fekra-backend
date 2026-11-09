@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   Prisma,
   Client,
@@ -26,15 +26,50 @@ import {
   ReplyRunActivityDetails,
   ReplyRunActivityDetailsSchema,
 } from '@common/zod/json-columns.schema';
-import { toClientRecord, toWorkflowData } from '../mappers/client.mapper';
+import {
+  ClientWorkflowRow,
+  toClientRecord,
+  toWorkflowData,
+} from '../mappers/client.mapper';
 import { QueryClientInput } from '../schemas/query-client.schema';
 import { changedFields } from '../helpers/changed-fields';
+import { REDIS } from '@app/inbox/inbox.constants';
+import { Redis } from 'ioredis';
 
 @Injectable()
 export class ClientsRepository implements IClientsRepository {
   private readonly logger = new Logger(ClientsRepository.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REDIS) private readonly redis: Redis,
+  ) {}
+
+  async findByAccountId(accountId: string): Promise<ClientRecord | null> {
+    let row: Client | null;
+
+    const cached = await this.redis.get(`client:account:${accountId}`);
+
+    if (cached) {
+      row = JSON.parse(cached) as Client;
+    } else {
+      row = await this.prisma.client.findFirst({
+        where: { OR: [{ fbPageId: accountId }, { instaAccountId: accountId }] },
+      });
+
+      if (row) {
+        await this.redis.set(
+          `client:account:${accountId}`,
+          JSON.stringify(row),
+          'EX',
+          30 * 60,
+        );
+      }
+    }
+
+    return row ? toClientRecord(row) : null;
+  }
+
   async findAll(
     query: QueryClientInput,
   ): Promise<PaginatedResult<ClientRecord>> {
@@ -149,12 +184,27 @@ export class ClientsRepository implements IClientsRepository {
   ): Promise<ClientWorkflowData | null> {
     if (!brandId) return null;
 
-    // the query is inline so Prisma infers the include type, which a separate
-    // `Prisma.ClientFindFirstArgs` variable would erase
-    const row = await this.prisma.client.findFirst({
-      where: { OR: [{ fbPageId: brandId }, { instaAccountId: brandId }] },
-      include: { services: true, offers: true, businessInfo: true },
-    });
+    let row: ClientWorkflowRow | null;
+
+    const cached = await this.redis.get(`client:workflow:${brandId}`);
+
+    if (cached) {
+      row = JSON.parse(cached) as ClientWorkflowRow;
+    } else {
+      row = await this.prisma.client.findFirst({
+        where: { OR: [{ fbPageId: brandId }, { instaAccountId: brandId }] },
+        include: { services: true, offers: true, businessInfo: true },
+      });
+
+      if (row) {
+        this.redis.set(
+          `client:workflow:${brandId}`,
+          JSON.stringify(row),
+          'EX',
+          30 * 60,
+        ); // cache for 30 minutes
+      }
+    }
 
     this.logger.debug(
       `getClientDataForWorkFlow(${brandId}) → ${row ? row.id : 'not found'}`,
@@ -240,7 +290,7 @@ export class ClientsRepository implements IClientsRepository {
     details: ReplyRunActivityDetails,
   ): Promise<void> {
     await this.recordActivity(this.prisma, {
-      action,
+      action: action,
       clientId: client.id,
       clientName: client.name,
       actor,
@@ -269,8 +319,8 @@ export class ClientsRepository implements IClientsRepository {
         actorName: entry.actor.name,
         actorEmail: entry.actor.email,
         changedFields: entry.changedFields ?? [],
-        details: entry.details,
-      },
+        details: entry.details as Prisma.InputJsonValue | undefined,
+      } as Prisma.ClientActivityUncheckedCreateInput,
     });
   }
 }

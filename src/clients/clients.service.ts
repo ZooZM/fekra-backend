@@ -116,6 +116,7 @@ export class ClientsService {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
   }
+
   /** A Facebook page / Instagram account can belong to one client only (webhooks match on it). */
   private async assertAccountsFree(
     ids: { fbPageId?: string | null; instaAccountId?: string | null },
