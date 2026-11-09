@@ -23,6 +23,8 @@ import { AttachmentHandlerService } from './attachment-handler.service';
 import { CommentClassifierService } from './comment-classifier.service';
 import { CommentLlmClassifierService } from './comment-llm-classifier.service';
 import { CommentReplyService } from './comment-reply.service';
+import { CommentsService } from '@app/comments/comments.service';
+import { ConversationsService } from '@app/conversations/conversations.service';
 
 @Injectable()
 export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
@@ -40,6 +42,8 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
     private readonly commentClassifier: CommentClassifierService,
     private readonly commentLlmClassifier: CommentLlmClassifierService,
     private readonly commentReply: CommentReplyService,
+    private readonly comments: CommentsService,
+    private readonly conversations: ConversationsService,
   ) {}
 
   private num(name: string, fallback: number): number {
@@ -226,6 +230,26 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
   private async handle(item: InboxItem) {
     switch (item.kind) {
       case 'message': {
+        if (item.senderId) {
+          try {
+            const client = await this.clientsService.findByAccountId(
+              item.accountId,
+            );
+            if (client) {
+              await this.conversations.findOrCreate({
+                clientId: client.id,
+                platform: item.platform,
+                senderId: item.senderId,
+                receiverId: item.accountId,
+              });
+            }
+          } catch (err) {
+            this.logger.error(
+              `Failed to persist conversation for message ${item.id}: ${(err as Error).message}`,
+            );
+          }
+        }
+
         let order = 0;
         if (item.text) {
           await this.dmBuffer.add(
@@ -285,6 +309,21 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           reason = `${reason}, fallback to spam`;
         }
         this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
+
+        try {
+          await this.comments.save({
+            clientId: client.id,
+            platform: item.platform,
+            commentId: item.id,
+            comment: item.text ?? '',
+            classification: type,
+            reason,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to persist classification for comment ${item.id}: ${(err as Error).message}`,
+          );
+        }
 
         // reply / DM / like / hide, handled entirely in Nest (no n8n for comments)
         await this.commentReply.handle(

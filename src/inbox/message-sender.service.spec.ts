@@ -1,6 +1,7 @@
 import { ClientsService } from '@app/clients/clients.service';
 import { GraphApiService, SendableRequest } from './graph-api.service';
 import { MessageSenderService } from './message-sender.service';
+import { ConversationsService } from '@app/conversations/conversations.service';
 
 describe('MessageSenderService', () => {
   let service: MessageSenderService;
@@ -14,7 +15,15 @@ describe('MessageSenderService', () => {
     senderId: 'user-1',
     clientId: 'client-1',
     client: { id: 'client-1' },
+    messages: [
+      { mid: 'm1', text: 'customer message', timestamp: 1 },
+      { mid: 'm2', text: 'follow-up', timestamp: 2 },
+    ],
   } as unknown as SendableRequest;
+  let conversations: {
+    findOrCreate: jest.Mock;
+    createMessage: jest.Mock;
+  };
 
   beforeEach(() => {
     graph = {
@@ -23,9 +32,14 @@ describe('MessageSenderService', () => {
       deadLetter: jest.fn().mockResolvedValue(undefined),
     };
     clients = { getAccessToken: jest.fn().mockResolvedValue('token') };
+    conversations = {
+      findOrCreate: jest.fn().mockResolvedValue({ id: 'chat-1' }),
+      createMessage: jest.fn().mockResolvedValue(undefined),
+    };
     service = new MessageSenderService(
       graph as unknown as GraphApiService,
       clients as unknown as ClientsService,
+      conversations as unknown as ConversationsService,
     );
   });
 
@@ -41,6 +55,17 @@ describe('MessageSenderService', () => {
       'token',
     );
     expect(graph.deadLetter).not.toHaveBeenCalled();
+    expect(conversations.findOrCreate).toHaveBeenCalledWith({
+      clientId: 'client-1',
+      platform: 'facebook',
+      senderId: 'user-1',
+      receiverId: 'page-1',
+    });
+    expect(conversations.createMessage).toHaveBeenCalledWith({
+      chatId: 'chat-1',
+      message: 'customer message\nfollow-up',
+      reply: 'hello',
+    });
   });
 
   it('splits messages at the platform limit', async () => {
@@ -48,6 +73,16 @@ describe('MessageSenderService', () => {
     expect(graph.post).toHaveBeenCalledTimes(2);
     expect(graph.post.mock.calls[0][1].message.text).toHaveLength(2000);
     expect(graph.post.mock.calls[1][1].message.text).toHaveLength(1);
+    expect(conversations.createMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a sent DM as failed when conversation persistence fails', async () => {
+    conversations.findOrCreate.mockRejectedValue(new Error('database down'));
+
+    await expect(service.reply(request, 'hello')).resolves.toBeUndefined();
+
+    expect(graph.post).toHaveBeenCalled();
+    expect(graph.deadLetter).not.toHaveBeenCalled();
   });
 
   it.each([

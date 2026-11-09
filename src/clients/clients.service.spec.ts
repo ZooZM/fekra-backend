@@ -15,6 +15,7 @@ describe('ClientsService', () => {
         'create',
         'findAll',
         'findById',
+        'findByAccountId',
         'update',
         'delete',
         'findMetaAccountConflict',
@@ -33,6 +34,14 @@ describe('ClientsService', () => {
       crypto as unknown as TokenCryptoService,
       repo as never,
     );
+  });
+
+  it('finds a client by its connected Meta account id', async () => {
+    const client = { id: 'c1' };
+    repo.findByAccountId.mockResolvedValue(client);
+
+    await expect(service.findByAccountId('page-1')).resolves.toBe(client);
+    expect(repo.findByAccountId).toHaveBeenCalledWith('page-1');
   });
 
   describe('create', () => {

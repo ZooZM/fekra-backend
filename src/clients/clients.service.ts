@@ -52,6 +52,10 @@ export class ClientsService {
     return client;
   }
 
+  findByAccountId(accountId: string): Promise<ClientRecord | null> {
+    return this.repo.findByAccountId(accountId);
+  }
+
   async update(
     id: string,
     input: UpdateClientInput,

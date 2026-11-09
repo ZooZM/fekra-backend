@@ -43,6 +43,9 @@ describe('PriorityInboxService (comments)', () => {
   let delivery: { send: jest.Mock };
   let llm: { classify: jest.Mock<Promise<Classification>, [string, unknown]> };
   let reply: { handle: jest.Mock };
+  let comments: { save: jest.Mock };
+  let conversations: { findOrCreate: jest.Mock };
+  let dmBuffer: { add: jest.Mock };
   let env: Record<string, string>;
 
   const handle = (item: InboxItem) => service['handle'](item);
@@ -58,19 +61,27 @@ describe('PriorityInboxService (comments)', () => {
     delivery = { send: jest.fn() };
     llm = { classify: jest.fn<Promise<Classification>, [string, unknown]>() };
     reply = { handle: jest.fn().mockResolvedValue(undefined) };
+    comments = { save: jest.fn().mockResolvedValue(undefined) };
+    conversations = {
+      findOrCreate: jest.fn().mockResolvedValue({ id: 'chat-1' }),
+    };
+    dmBuffer = { add: jest.fn().mockResolvedValue(undefined) };
 
     service = new PriorityInboxService(
       redis as unknown as Redis,
-      {} as DmBufferService,
+      dmBuffer as unknown as DmBufferService,
       delivery as unknown as N8nDeliveryService,
       { get: (k: string) => env[k] } as unknown as ConfigService,
       {
+        findByAccountId: jest.fn().mockResolvedValue(client),
         getClientDataForWorkFlow: jest.fn().mockResolvedValue(client),
       } as unknown as ClientsService,
       {} as AttachmentHandlerService,
       new CommentClassifierService(),
       llm as unknown as CommentLlmClassifierService,
       reply as unknown as CommentReplyService,
+      comments as never,
+      conversations as never,
     );
   });
 
@@ -79,6 +90,22 @@ describe('PriorityInboxService (comments)', () => {
 
     expect(llm.classify).not.toHaveBeenCalled();
     expect(repliedWith()).toEqual(['inquiry']);
+    expect(comments.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: client.id,
+        commentId: 'c-1',
+        comment: 'بكام',
+        classification: 'inquiry',
+      }),
+    );
+  });
+
+  it('still handles a comment if saving its classification fails', async () => {
+    comments.save.mockRejectedValue(new Error('database unavailable'));
+
+    await handle(comment('بكام'));
+
+    expect(reply.handle).toHaveBeenCalled();
   });
 
   it('asks the LLM when the rules are unsure, and acts on its answer', async () => {
@@ -87,6 +114,32 @@ describe('PriorityInboxService (comments)', () => {
 
     expect(llm.classify).toHaveBeenCalledWith('random words here', client);
     expect(repliedWith()).toEqual(['complaint']);
+    expect(comments.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'complaint',
+        reason: 'llm',
+      }),
+    );
+  });
+
+  it('creates a conversation as soon as a customer message is processed', async () => {
+    await handle({
+      kind: 'message',
+      platform: 'instagram',
+      id: 'message-1',
+      accountId: 'account-1',
+      senderId: 'sender-1',
+      text: 'Hello',
+      timestamp: 1_000,
+    });
+
+    expect(conversations.findOrCreate).toHaveBeenCalledWith({
+      clientId: client.id,
+      platform: 'instagram',
+      senderId: 'sender-1',
+      receiverId: 'account-1',
+    });
+    expect(dmBuffer.add).toHaveBeenCalled();
   });
 
   it('never sends comments to n8n', async () => {
@@ -115,6 +168,7 @@ describe('PriorityInboxService (comments)', () => {
       await handle(comment('random words here'));
 
       expect(reply.handle).not.toHaveBeenCalled();
+      expect(comments.save).not.toHaveBeenCalled();
       const [key, score, member] = redis.zadd.mock.calls[0] as [
         string,
         number,
@@ -143,6 +197,9 @@ describe('PriorityInboxService (comments)', () => {
 
       expect(redis.zadd).not.toHaveBeenCalled();
       expect(repliedWith()).toEqual(['spam']);
+      expect(comments.save).toHaveBeenCalledWith(
+        expect.objectContaining({ classification: 'spam' }),
+      );
     });
 
     it('respects COMMENT_LLM_MAX_ATTEMPTS and COMMENT_LLM_RETRY_DELAY_MS', async () => {

@@ -18,6 +18,8 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AppZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { GraphApiModule } from './inbox/graph-api.module';
+import { CommentsModule } from './comments/comments.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
@@ -42,6 +44,8 @@ function devModules() {
     UsersModule,
     AuthModule,
     ClientsModule,
+    CommentsModule,
+    ConversationsModule,
     ClientPostsModule,
     ServicesModule,
     BusinessInfoModule,

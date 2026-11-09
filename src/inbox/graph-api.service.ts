@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { REDIS } from './inbox.constants';
 import { ClientRecord } from '@app/clients/types/client.types';
+import { BufferedMessage } from './inbox.types';
 
 export type Platform = 'facebook' | 'instagram';
 
@@ -14,6 +15,7 @@ export interface SendableRequest {
   senderId?: string;
   clientId: string;
   client?: ClientRecord;
+  messages?: BufferedMessage[];
 }
 
 const HOSTS: Record<Platform, string> = {

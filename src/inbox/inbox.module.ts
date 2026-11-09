@@ -17,9 +17,16 @@ import { PostCommentsService } from './post-comments.service';
 import { BackfillRunStore } from './backfill-run.store';
 import { CommentBackfillController } from './comment-backfill.controller';
 import { GraphApiModule } from './graph-api.module';
+import { CommentsModule } from '@app/comments/comments.module';
+import { ConversationsModule } from '@app/conversations/conversations.module';
 
 @Module({
-  imports: [forwardRef(() => ClientsModule), GraphApiModule],
+  imports: [
+    forwardRef(() => ClientsModule),
+    GraphApiModule,
+    CommentsModule,
+    ConversationsModule,
+  ],
   controllers: [N8nCallbackController, CommentBackfillController],
   providers: [
     ...redisProviders,

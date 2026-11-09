@@ -29,6 +29,20 @@ enum ClientActivityAction {
   REPLY_RUN_STOPPED // ...and stopped by an admin before it ended
 }
 
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum CommentClassification {
+  ENGAGEMENT
+  INQUIRY
+  UNSURE
+  COMPLAINT
+  SPAM
+  INSULT
+}
+
 // ───────────────────────────── Business data ─────────────────────────────
 
 model Client {
@@ -68,10 +82,12 @@ model Client {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  businessInfo BusinessInfo?
-  services     Service[]
-  offers       Offer[]
-  users        User[]
+  businessInfo   BusinessInfo?
+  services       Service[]
+  offers         Offer[]
+  users          User[]
+  chats          Chat[]
+  commentReplies CommentReply[]
 
   @@map("clients")
 }
@@ -239,4 +255,76 @@ model ClientActivity {
   @@index([actorId])
   @@index([createdAt])
   @@map("client_activities")
+}
+
+// ───────────────────────────── Chats ─────────────────────────────
+// One conversation between a customer and one of the client's accounts.
+// The `id` is the chat_id that message_replies point to.
+// These tables hold customers' messages: decide a retention period and purge old rows.
+model Chat {
+  id       String   @id @default(uuid()) @db.Uuid
+  clientId String   @map("client_id") @db.Uuid
+  platform Platform
+
+  // The customer: Messenger PSID or Instagram IGSID
+  senderId   String @map("sender_id") @db.VarChar(255)
+  // The client's account that received the message: matches Client.fbPageId or Client.instaAccountId
+  receiverId String @map("receiver_id") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  client   Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  messages MessageReply[]
+
+  // One chat per customer per account, so find-or-create is a single upsert
+  @@unique([platform, receiverId, senderId])
+  @@index([clientId])
+  @@map("chats")
+}
+
+// A customer message and the reply that was sent to it. Append-only.
+// The DM pipeline batches messages sent within a few seconds of each other, so `message`
+// holds the whole batch (join the pieces with a line break).
+model MessageReply {
+  id     String @id @default(uuid()) @db.Uuid
+  chatId String @map("chat_id") @db.Uuid
+
+  message String @db.Text
+  reply   String @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  // Loading a chat's history in order
+  @@index([chatId, createdAt])
+  @@map("message_replies")
+}
+
+// ───────────────────────────── Comments ─────────────────────────────
+
+// Every comment that was classified, with the label and why. Useful for auditing the
+// classifier and as labeled training data later. Holds customer text: same retention note as Chat.
+model CommentReply {
+  id       String   @id @default(uuid()) @db.Uuid
+  clientId String   @map("client_id") @db.Uuid
+  platform Platform
+
+  // Meta's id for the comment, so a redelivered or re-classified comment updates one row
+  commentId String @map("comment_id") @db.VarChar(255)
+
+  // The comment text (Facebook allows up to 8000 characters)
+  comment        String                @db.Text
+  classification CommentClassification
+  // e.g. `keyword "how"`, `question mark`, or the LLM's explanation
+  reason         String                @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, commentId])
+  @@index([clientId, createdAt])
+  @@map("comment_replies")
 }
