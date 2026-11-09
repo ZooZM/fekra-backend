@@ -20,7 +20,7 @@ WORKDIR /app
 # ---- deps: the full dependency tree (Nest CLI, TypeScript and the Prisma CLI are dev deps) ---
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
 
 # ---- build: generate the Prisma client, then compile to dist/ ---------------------------------
 FROM deps AS build
@@ -42,7 +42,7 @@ CMD ["npx", "prisma", "migrate", "deploy"]
 # ---- prod-deps: runtime dependencies only -----------------------------------------------------
 FROM base AS prod-deps
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci --omit=dev
 
 # ---- runtime: what runs in production (last stage = default target) ---------------------------
 FROM base AS runtime
