@@ -1,0 +1,27 @@
+$kind: http-request
+description: |-
+  Reads a reply run's progress or outcome. **Requires:** `ADMIN` role (403 otherwise).
+
+  Uses `{{runId}}` (saved by **Backfill Unanswered Comments**). The dashboard polls this every 5 seconds while `state` is `running`.
+
+  **Response `200`:** `{ id, clientId, accountId, platform, postId, state, interruptReason, total, toAnswer, handled, queued, dropped, skipped, delaySeconds, startedAt, estimatedEndAt, endedAt, startedBy, stoppedBy }`
+  - `state`: `running`, `finished`, `stopped` or `interrupted`. An ended run stays readable for 24 hours (`COMMENT_BACKFILL_RESULT_TTL_SEC`).
+  - `handled = queued + dropped + skipped`, out of `toAnswer`. `queued`: accepted by the inbox. `dropped`: refused by the inbox (a duplicate or a blocked sender). `skipped`: answered, hidden or deleted since the run started, or the re-check failed.
+  - `interruptReason` (when `interrupted`): `SERVER_RESTART` (the server died mid-run: reported once the run's lock expires, about a minute after the last comment), `COMMENT_REPLIES_DISABLED`, `ACCOUNT_DISCONNECTED` (the client was deleted or lost the account) or `META_ACCESS_LOST` (Meta rejected the client's token).
+
+  **Other responses:** `404` `BACKFILL_RUN_NOT_FOUND` (unknown id, or ended more than 24 hours ago); `422` `INPUT_VALIDATION_ERROR` (the id is not a UUID).
+url: "{{baseUrl}}/inbox/comments/backfill/runs/:id"
+method: GET
+pathVariables:
+  id: "{{runId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const json = pm.response.json();
+      pm.test('Has a state and the handled counter', () => {
+        pm.expect(json).to.have.property('state');
+        pm.expect(json.handled).to.eql(json.queued + json.dropped + json.skipped);
+      });
+    language: text/javascript
+order: 2000

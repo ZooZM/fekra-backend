@@ -1,8 +1,6 @@
 import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { TokenCryptoService } from '@app/crypto/token-crypto.service';
-import { GraphApiService } from '@app/inbox/graph-api.service';
-import { CommentBackfillService } from '@app/inbox/comment-backfill.service';
 
 const actor = { id: 'a1', name: 'Admin', email: 'admin@example.com' };
 
@@ -10,7 +8,6 @@ describe('ClientsService', () => {
   let service: ClientsService;
   let repo: Record<string, jest.Mock>;
   let crypto: { encrypt: jest.Mock; decrypt: jest.Mock };
-  let backfill: { start: jest.Mock };
 
   beforeEach(() => {
     repo = Object.fromEntries(
@@ -24,6 +21,7 @@ describe('ClientsService', () => {
         'getClientDataForWorkFlow',
         'setAccessToken',
         'getAccessToken',
+        'recordReplyRunActivity',
       ].map((name) => [name, jest.fn()]),
     );
     repo.findMetaAccountConflict.mockResolvedValue(null);
@@ -31,12 +29,9 @@ describe('ClientsService', () => {
       encrypt: jest.fn((value, id) => `encrypted:${id}:${value}`),
       decrypt: jest.fn(),
     };
-    backfill = { start: jest.fn() };
     service = new ClientsService(
       crypto as unknown as TokenCryptoService,
       repo as never,
-      { host: jest.fn(), get: jest.fn() } as unknown as GraphApiService,
-      backfill as unknown as CommentBackfillService,
     );
   });
 
@@ -193,6 +188,57 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('recordReplyRun', () => {
+    const details = {
+      runId: '3f0e1c2a-8a43-4c55-9b55-0d7b0c7b1e11',
+      platform: 'facebook' as const,
+      accountId: '114022207011543',
+      postId: '114022207011543_100068101366873',
+      toAnswer: 8,
+    };
+
+    it('records the action for the client name given, with the actor and the details', async () => {
+      repo.recordReplyRunActivity.mockResolvedValue(undefined);
+
+      await service.recordReplyRun(
+        { id: 'c1', name: 'Acme' },
+        'REPLY_RUN_STARTED',
+        actor,
+        details,
+      );
+
+      expect(repo.recordReplyRunActivity).toHaveBeenCalledWith(
+        { id: 'c1', name: 'Acme' },
+        'REPLY_RUN_STARTED',
+        actor,
+        details,
+      );
+    });
+
+    it('does not look the client up, so a stop is still recorded after the client was deleted', async () => {
+      repo.recordReplyRunActivity.mockResolvedValue(undefined);
+      await service.recordReplyRun(
+        { id: 'deleted', name: 'Gone' },
+        'REPLY_RUN_STOPPED',
+        actor,
+        { ...details, handled: 3 },
+      );
+      expect(repo.findById).not.toHaveBeenCalled();
+    });
+
+    it('passes a repository failure on, so the caller can refuse to start the run', async () => {
+      repo.recordReplyRunActivity.mockRejectedValue(new Error('db down'));
+      await expect(
+        service.recordReplyRun(
+          { id: 'c1', name: 'Acme' },
+          'REPLY_RUN_STARTED',
+          actor,
+          details,
+        ),
+      ).rejects.toThrow('db down');
+    });
+  });
+
   it('delegates reads and returns the workflow data', async () => {
     repo.findById.mockResolvedValue(null);
     await expect(service.findById('missing')).rejects.toBeInstanceOf(
@@ -203,30 +249,5 @@ describe('ClientsService', () => {
     await expect(service.getClientDataForWorkFlow('c1')).resolves.toBe(
       workflow,
     );
-  });
-
-  describe('replyToPost', () => {
-    it('starts a comment backfill for the client Facebook page', async () => {
-      const result = { postId: '12345_67890', pending: 2 };
-      repo.findById.mockResolvedValue({ id: 'c1', fbPageId: '12345' });
-      backfill.start.mockResolvedValue(result);
-
-      await expect(service.replyToPost('c1', '12345_67890')).resolves.toBe(
-        result,
-      );
-      expect(backfill.start).toHaveBeenCalledWith({
-        accountId: '12345',
-        postId: '12345_67890',
-      });
-    });
-
-    it('throws when the client has no Facebook page', async () => {
-      repo.findById.mockResolvedValue({ id: 'c1', fbPageId: null });
-
-      await expect(
-        service.replyToPost('c1', '12345_67890'),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expect(backfill.start).not.toHaveBeenCalled();
-    });
   });
 });

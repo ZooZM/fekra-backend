@@ -10,3 +10,8 @@ export const REQ_TTL = 'n8n:ttl:'; // + request id
 export const DEAD_LIST = 'n8n:dead';
 export const DM_DATA = 'dmbuf:data:'; // + platform:account:sender
 export const DM_TTL = 'dmbuf:ttl:'; // + platform:account:sender
+
+// Reply runs on a post's unreplied comments (see data-model.md in specs/002-client-posts-backfill)
+export const BACKFILL_RUN = 'backfill:run:'; // + run id: hash with the run's state and counters
+export const BACKFILL_LOCK = 'backfill:lock:'; // + platform:postId: run id; one run per post, expires on its own
+export const BACKFILL_POST = 'backfill:post:'; // + platform:postId: id of the latest run on the post

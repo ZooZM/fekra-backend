@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -15,22 +14,19 @@ import { CreateClientInput, UpdateClientInput } from './schemas/client.schema';
 import {
   ClientActor,
   ClientRecord,
+  ClientRef,
   ClientWorkflowData,
+  ReplyRunAction,
 } from './types/client.types';
+import { ReplyRunActivityDetails } from '@common/zod/json-columns.schema';
 import { randomUUID } from 'crypto';
 import { QueryClientInput } from './schemas/query-client.schema';
-import { GraphApiService, Platform } from '@app/inbox/graph-api.service';
-import { CommentBackfillService } from '@app/inbox/comment-backfill.service';
-import { FacebookComment } from './types/facebook-comment.types';
 
 @Injectable()
 export class ClientsService {
   constructor(
     private readonly crypto: TokenCryptoService,
     @Inject(CLIENTS_REPOSITORY) private readonly repo: IClientsRepository,
-    private readonly graph: GraphApiService,
-    @Inject(forwardRef(() => CommentBackfillService))
-    private readonly commentBackfill: CommentBackfillService,
   ) {}
 
   async create(
@@ -102,6 +98,20 @@ export class ClientsService {
     if (!stored) throw new NotFoundException('Client not found');
   }
 
+  /**
+   * Puts a reply run's start or stop in the activity record (FR-019). It takes the client's
+   * name from the run instead of reading the client, so a run stopped after its client was
+   * deleted is still recorded.
+   */
+  recordReplyRun(
+    client: ClientRef,
+    action: ReplyRunAction,
+    actor: ClientActor,
+    details: ReplyRunActivityDetails,
+  ): Promise<void> {
+    return this.repo.recordReplyRunActivity(client, action, actor, details);
+  }
+
   async getAccessToken(clientId: string): Promise<string | null> {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
@@ -122,47 +132,5 @@ export class ClientsService {
         details: { field },
       });
     }
-  }
-
-  async getAllPosts(accountId: string): Promise<unknown[]> {
-    const client = await this.repo.findByAccountId(accountId);
-
-    if (!client) {
-      throw new NotFoundException('Client not found');
-    }
-
-    const platform: Platform =
-      client.fbPageId === accountId ? 'facebook' : 'instagram';
-
-    const base = this.graph.host(platform);
-
-    const urlPath = platform === 'facebook' ? 'posts' : 'media';
-
-    const params = new URLSearchParams({
-      // fields: 'id',
-      limit: '100',
-    });
-
-    const url = `${base}/${client.fbPageId}/${urlPath}?${params.toString()}`;
-    const token = await this.getAccessToken(client.id);
-    if (!token) throw new NotFoundException('Client not found');
-    const response = await this.graph.get<{ data: unknown[] }>(url, token);
-
-    const posts = response.data.map((post) => post);
-
-    return posts;
-  }
-
-  async replyToPost(accountId: string, postId: string) {
-    const client = await this.repo.findByAccountId(accountId);
-
-    if (!client) {
-      throw new NotFoundException('Client not found');
-    }
-
-    return this.commentBackfill.start({
-      accountId,
-      postId,
-    });
   }
 }

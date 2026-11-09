@@ -5,9 +5,12 @@ import {
   AccountField,
   ClientActor,
   ClientRecord,
+  ClientRef,
   ClientUpdateResult,
   ClientWorkflowData,
+  ReplyRunAction,
 } from '../types/client.types';
+import { ReplyRunActivityDetails } from '@common/zod/json-columns.schema';
 import { QueryClientInput } from '../schemas/query-client.schema';
 
 export const CLIENTS_REPOSITORY = 'CLIENTS_REPOSITORY';
@@ -34,8 +37,6 @@ export interface IClientsRepository extends Omit<
   /** false: no such client. */
   delete(id: string, actor: ClientActor): Promise<boolean>;
 
-  /** accounId is either the Facebook page ID or the Instagram account ID. */
-  findByAccountId(accountId: string): Promise<ClientRecord | null>;
   /** The first account id already used by another client, if any. */
   findMetaAccountConflict(
     ids: { fbPageId?: string | null; instaAccountId?: string | null },
@@ -43,6 +44,16 @@ export interface IClientsRepository extends Omit<
   ): Promise<AccountField | null>;
   getClientDataForWorkFlow(brandId: string): Promise<ClientWorkflowData | null>;
   getAccessToken(clientId: string): Promise<string | null>;
+  /**
+   * Records a reply run starting or stopping. No client row changes, so this is one insert and
+   * the client does not have to exist anymore: the entry keeps its name.
+   */
+  recordReplyRunActivity(
+    client: ClientRef,
+    action: ReplyRunAction,
+    actor: ClientActor,
+    details: ReplyRunActivityDetails,
+  ): Promise<void>;
   /** false: no such client. Does not change the version. */
   setAccessToken(
     clientId: string,

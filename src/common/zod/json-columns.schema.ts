@@ -1,6 +1,12 @@
 // clients/schemas/json-columns.schema.ts
 import { z } from 'zod';
-import { httpUrl, replies, text } from '../../common/zod/primitives';
+import {
+  httpUrl,
+  metaId,
+  metaPostId,
+  replies,
+  text,
+} from '../../common/zod/primitives';
 
 // aiConfig: only `language` is decided. looseObject keeps unknown keys until you add them here,
 // then switch to z.strictObject.
@@ -73,6 +79,18 @@ export const VariantsSchema = z
     'Variant names must be unique',
   );
 
+// ClientActivity.details, only for REPLY_RUN_STARTED / REPLY_RUN_STOPPED. Never holds a token
+// or any comment text: ids and counts only.
+export const ReplyRunActivityDetailsSchema = z.strictObject({
+  runId: z.uuid(),
+  platform: z.enum(['facebook', 'instagram']),
+  accountId: metaId,
+  postId: metaPostId,
+  toAnswer: z.int().min(0),
+  /** REPLY_RUN_STOPPED only: comments the run had handled when it was stopped. */
+  handled: z.int().min(0).optional(),
+});
+
 export type AiConfig = z.infer<typeof AiConfigSchema>;
 export type DmReplyConfig = z.infer<typeof DmReplyConfigSchema>;
 export type CommentReplyConfig = z.infer<typeof CommentReplyConfigSchema>;
@@ -80,3 +98,6 @@ export type SocialMedia = z.infer<typeof SocialMediaSchema>;
 export type Location = z.infer<typeof LocationSchema>;
 export type WorkHours = z.infer<typeof WorkHoursSchema>;
 export type Variants = z.infer<typeof VariantsSchema>;
+export type ReplyRunActivityDetails = z.infer<
+  typeof ReplyRunActivityDetailsSchema
+>;

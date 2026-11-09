@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { GeneralExceptionsFilter } from './common/filters/general-exceptions.filter';
 import { ClientsModule } from './clients/clients.module';
+import { ClientPostsModule } from './client-posts/client-posts.module';
 import { ServicesModule } from './services/services.module';
 import { BusinessInfoModule } from './business-info/business-info.module';
 import { OffersModule } from './offers/offers.module';
@@ -41,6 +42,7 @@ function devModules() {
     UsersModule,
     AuthModule,
     ClientsModule,
+    ClientPostsModule,
     ServicesModule,
     BusinessInfoModule,
     OffersModule,

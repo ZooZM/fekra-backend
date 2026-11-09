@@ -1,0 +1,44 @@
+$kind: http-request
+description: |-
+  Lists one page of a client's posts on Facebook or Instagram, newest first, read live from Meta (nothing is stored). **Requires:** `ADMIN` role (403 otherwise).
+
+  Uses `{{clientId}}` (the client's id, not a Facebook page id). The unreplied count of each post is a separate request: **Count Unreplied Comments**.
+
+  **Query:** `platform` (`facebook` or `instagram`, required), `limit` (1 to 25, default 25), `after` (the previous page's `meta.nextCursor`).
+
+  **Responses**
+  - `200` `{ data: ClientPost[], meta: { limit, nextCursor, fetchedAt } }`. `nextCursor` is `null` on the last page. Meta gives no totals, so this list does not use `page`/`totalPages`.
+  - `404` `NOT_FOUND` (no such client) or `ACCOUNT_NOT_CONNECTED` (the client has no account on that platform, or Meta cannot find it with the client's token).
+  - `400` `BAD_REQUEST` (no access token on file), `META_TOKEN_INVALID` (expired or revoked: replace it with **Set Client Access Token**) or `META_PERMISSION_DENIED`.
+  - `422` `INPUT_VALIDATION_ERROR`: bad `platform`, `limit` or `after`, or a client id that is not a UUID.
+  - `502` `META_ERROR`, `503` `META_UNAVAILABLE` (Meta is down or rate-limiting; try again later). `details` carries Meta's `graphCode` / `graphSubcode`.
+url: "{{baseUrl}}/clients/:id/posts?platform=facebook&limit=25"
+method: GET
+pathVariables:
+  id: "{{clientId}}"
+queryParams:
+  - key: platform
+    value: facebook
+    disabled: false
+    description: facebook or instagram
+  - key: limit
+    value: "25"
+    disabled: false
+    description: Page size, 1 to 25
+  - key: after
+    value: "{{nextCursor}}"
+    disabled: true
+    description: meta.nextCursor of the previous page
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));
+      const json = pm.response.json();
+      pm.test('Has posts and a paging cursor field', () => {
+        pm.expect(json).to.have.property('data');
+        pm.expect(json.meta).to.have.property('nextCursor');
+      });
+      if (json.data && json.data.length) pm.collectionVariables.set('postId', json.data[0].id);
+      pm.collectionVariables.set('nextCursor', json.meta && json.meta.nextCursor ? json.meta.nextCursor : '');
+    language: text/javascript
+order: 7000

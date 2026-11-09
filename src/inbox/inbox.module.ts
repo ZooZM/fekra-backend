@@ -13,6 +13,8 @@ import { AttachmentHandlerService } from './attachment-handler.service';
 import { CommentClassifierService } from './comment-classifier.service';
 import { CommentLlmClassifierService } from './comment-llm-classifier.service';
 import { CommentBackfillService } from './comment-backfill.service';
+import { PostCommentsService } from './post-comments.service';
+import { BackfillRunStore } from './backfill-run.store';
 import { CommentBackfillController } from './comment-backfill.controller';
 import { GraphApiModule } from './graph-api.module';
 
@@ -30,8 +32,15 @@ import { GraphApiModule } from './graph-api.module';
     AttachmentHandlerService,
     CommentClassifierService,
     CommentLlmClassifierService,
+    PostCommentsService,
+    BackfillRunStore,
     CommentBackfillService,
   ],
-  exports: [PriorityInboxService, CommentBackfillService],
+  exports: [
+    PriorityInboxService,
+    CommentBackfillService,
+    PostCommentsService,
+    BackfillRunStore,
+  ],
 })
 export class InboxModule {}

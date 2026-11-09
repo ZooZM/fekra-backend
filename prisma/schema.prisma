@@ -25,6 +25,8 @@ enum ClientActivityAction {
   UPDATED
   DELETED
   ACCESS_TOKEN_REPLACED
+  REPLY_RUN_STARTED // a reply run on a post's unreplied comments was started
+  REPLY_RUN_STOPPED // ...and stopped by an admin before it ended
 }
 
 // ───────────────────────────── Business data ─────────────────────────────
@@ -227,6 +229,10 @@ model ClientActivity {
   action        ClientActivityAction
   // UPDATED only: top-level field names that changed, never values
   changedFields String[]             @default([]) @map("changed_fields")
+  // REPLY_RUN_* only: { runId, platform, accountId, postId, toAnswer, handled? } (ids and counts,
+  // never a token or comment text). Validated by ReplyRunActivityDetailsSchema, read through
+  // readReplyRunDetails. Null for the other actions.
+  details       Json?                @map("details")
   createdAt     DateTime             @default(now()) @map("created_at")
 
   @@index([clientId, createdAt])

@@ -7,6 +7,17 @@ export const metaId = z
   .string()
   .trim()
   .regex(/^\d{5,30}$/, 'Must be a numeric Meta ID');
+/** Facebook post id (`{pageId}_{postId}` or the object id) or Instagram media id. */
+export const metaPostId = z
+  .string()
+  .trim()
+  .regex(/^\d{5,30}(_\d{5,30})?$/, 'Must be a Meta post or media ID');
+/** A Graph API paging cursor. Restricted to the base64url alphabet so it can't alter the request URL. */
+export const graphCursor = z
+  .string()
+  .min(1)
+  .max(512)
+  .regex(/^[A-Za-z0-9_\-=]+$/, 'Invalid cursor');
 export const replies = z.array(text(1000)).max(50);
 export const uniqueStrings = (max = 50) =>
   z

@@ -3,92 +3,84 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
-  forwardRef,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleDestroy,
+  forwardRef,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { ClientsService } from '@app/clients/clients.service';
-import { GraphApiService, GraphError } from './graph-api.service';
-import { PriorityInboxService } from './priority-inbox.service';
+import { ClientActor } from '@app/clients/types/client.types';
+import { BackfillRunStore, RunRef, StoredRun } from './backfill-run.store';
+import { GraphError } from './graph-api.service';
 import { InboxItem, Platform } from './inbox.types';
-import { CommentBackfillInput } from './schemas/comment-backfill.schema';
+import {
+  isAccessError,
+  PostComment,
+  PostCommentsService,
+} from './post-comments.service';
+import { PriorityInboxService } from './priority-inbox.service';
+import {
+  BackfillRun,
+  BackfillStartResult,
+  CommentBackfillInput,
+  InterruptReason,
+} from './schemas/comment-backfill.schema';
 
-/** A top-level comment, normalized from the Facebook and Instagram shapes. */
-export interface PostComment {
-  id: string;
-  text?: string;
-  senderId?: string;
-  createdAt: number; // ms
-  hidden: boolean;
-  /** Who replied to it, to know whether the page already answered. */
-  replierIds: string[];
-}
-
-export interface CommentBackfillResult {
-  platform: Platform;
-  postId: string;
-  /** Top-level comments on the post (up to the configured maximum). */
-  total: number;
-  /** Comments the page hasn't replied to; they are fed to the inbox one by one. */
-  pending: number;
-  /** Seconds between two comments, to avoid Meta's spam limits. */
-  delaySeconds: number;
-}
-
-interface Page<T> {
-  data?: T[];
-  paging?: { next?: string };
-}
-
-interface FacebookComment {
-  id: string;
-  message?: string;
-  created_time?: string;
-  is_hidden?: boolean;
-  from?: { id: string };
-  comments?: Page<{ from?: { id: string } }>;
-}
-
-interface InstagramComment {
-  id: string;
-  text?: string;
-  timestamp?: string;
-  hidden?: boolean;
-  from?: { id: string };
-  replies?: Page<{ from?: { id: string } }>;
-}
+/**
+ * How long past one pause a run's lock survives without being renewed: a re-check (3 tries of
+ * 10 s plus the backoff) and a push fit well inside it. If the process dies, the lock expires
+ * after this and the post is free again.
+ */
+const LOCK_GRACE_MS = 60_000;
 
 /**
  * Replies to old comments on a post that the page never answered
- * (port of the "reply to old comments" n8n workflow).
+ * (port of the "reply to old comments" n8n workflow), as a "run" an admin can follow and stop.
  *
- * 1. Fetch the post's top-level comments (all pages, newest first).
- * 2. Keep the ones that aren't from the page, aren't hidden, and have no reply from the page.
- * 3. Push them into the inbox one at a time with a delay, exactly like live webhook comments,
- *    so they go through the same dedupe, blocklist, classifier and CommentReplyService.
+ * 1. `start` reads the post's top-level comments and keeps the ones the page hasn't answered
+ *    (PostCommentsService, the same rule the dashboard's unreplied count uses).
+ * 2. A background worker pushes them into the inbox one at a time with a delay, exactly like
+ *    live webhook comments, so they go through the same dedupe, blocklist, classifier and
+ *    CommentReplyService.
+ * 3. Just before each comment, the worker checks that the run wasn't stopped, that the client
+ *    still has comment replies on, and that the comment still needs a reply.
+ *
+ * The run's state lives in Redis (BackfillRunStore), so every instance sees the same runs and
+ * only one run per post can be in progress.
  */
 @Injectable()
 export class CommentBackfillService implements OnModuleDestroy {
   private readonly logger = new Logger(CommentBackfillService.name);
-  /** Posts with a run in progress on this instance. Other instances are covered by the inbox dedupe. */
-  private readonly running = new Set<string>();
+  /** Runs this instance is feeding, so a shutdown can mark them interrupted. */
+  private readonly active = new Map<string, RunRef>();
   private stopped = false;
 
   constructor(
-    private readonly graph: GraphApiService,
     @Inject(forwardRef(() => ClientsService))
     private readonly clients: ClientsService,
     private readonly inbox: PriorityInboxService,
     private readonly config: ConfigService,
+    private readonly postComments: PostCommentsService,
+    private readonly store: BackfillRunStore,
   ) {}
 
-  onModuleDestroy() {
+  /**
+   * Marks this instance's runs as interrupted. Best effort: Redis may already be closing, and if
+   * it is, the lock expiring does the same job (see `getRun`).
+   */
+  async onModuleDestroy(): Promise<void> {
     this.stopped = true;
+    const ttl = this.resultTtlSec();
+    await Promise.allSettled(
+      [...this.active.values()].map((run) =>
+        this.store.end(run, 'interrupted', 'SERVER_RESTART', ttl),
+      ),
+    );
   }
 
   private num(name: string, fallback: number): number {
@@ -96,11 +88,23 @@ export class CommentBackfillService implements OnModuleDestroy {
     return Number.isFinite(value) && value >= 0 ? value : fallback;
   }
 
+  /** A TTL of 0 would delete the run at once, so it falls back to the default. */
+  private resultTtlSec(): number {
+    const seconds = Math.floor(
+      this.num('COMMENT_BACKFILL_RESULT_TTL_SEC', 86400),
+    );
+    return seconds > 0 ? seconds : 86400;
+  }
+
   /**
    * Finds the unanswered comments and starts feeding them to the inbox in the background.
-   * Returns right away with the counts; the run itself can take several minutes.
+   * Returns right away with the counts; the run itself can take several minutes. When nothing
+   * needs a reply, nothing starts and nothing is recorded (`run: null`).
    */
-  async start(input: CommentBackfillInput): Promise<CommentBackfillResult> {
+  async start(
+    input: CommentBackfillInput,
+    actor: ClientActor,
+  ): Promise<BackfillStartResult> {
     const { accountId, postId } = input;
 
     const client = await this.clients.getClientDataForWorkFlow(accountId);
@@ -108,130 +112,347 @@ export class CommentBackfillService implements OnModuleDestroy {
     const platform: Platform =
       client.fbPageId === accountId ? 'facebook' : 'instagram';
 
+    // with replies off the run would go through every comment and post nothing
+    if (!client.commentReplyConfig.enabled) {
+      throw new ConflictException({
+        message: 'Comment replies are turned off for this client',
+        errorCode: 'COMMENT_REPLIES_DISABLED',
+      });
+    }
+
     const token = await this.clients.getAccessToken(client.id);
     if (!token)
       throw new BadRequestException('No access token stored for this client');
 
-    const key = `${platform}:${postId}`;
-    if (this.running.has(key)) {
-      throw new ConflictException(
-        'A backfill is already running for this post',
-      );
+    const delayMs = this.num('COMMENT_BACKFILL_DELAY_MS', 5000);
+    const ref: RunRef = { id: randomUUID(), platform, postId };
+    const acquired = await this.store.acquireLock(
+      platform,
+      postId,
+      ref.id,
+      delayMs + LOCK_GRACE_MS,
+    );
+    if (!acquired) {
+      throw new ConflictException({
+        message: 'A backfill is already running for this post',
+        errorCode: 'CONFLICT',
+        details: { runId: await this.store.lockHolder(platform, postId) },
+      });
     }
-    this.running.add(key);
 
+    let found: Awaited<ReturnType<PostCommentsService['listUnreplied']>>;
     try {
-      const comments = await this.fetchComments(platform, postId, token);
-      const pending = comments
-        .filter((c) => this.needsReply(c, platform, accountId))
-        .sort((a, b) => b.createdAt - a.createdAt); // newest first, like the n8n workflow
-
-      const delayMs = this.num('COMMENT_BACKFILL_DELAY_MS', 5000);
-      this.logger.log(
-        `Backfill ${key}: ${pending.length}/${comments.length} comments without a reply`,
+      found = await this.postComments.listUnreplied(
+        platform,
+        accountId,
+        postId,
+        token,
       );
+    } catch (err) {
+      await this.release(ref);
+      throw toHttpError(err, platform, postId);
+    }
 
-      void this.feed(key, pending, { platform, accountId, postId }, delayMs);
-
+    const { checked, unreplied } = found;
+    if (unreplied.length === 0) {
+      await this.release(ref);
+      this.logger.log(
+        `Backfill ${platform}:${postId}: nothing to answer (${checked} comments checked)`,
+      );
       return {
         platform,
         postId,
-        total: comments.length,
-        pending: pending.length,
+        total: checked,
+        pending: 0,
         delaySeconds: delayMs / 1000,
+        run: null,
       };
-    } catch (err) {
-      this.running.delete(key);
-      throw toHttpError(err, platform, postId);
     }
+
+    const startedAt = Date.now();
+    const run: StoredRun = {
+      id: ref.id,
+      clientId: client.id,
+      clientName: client.name,
+      accountId,
+      platform,
+      postId,
+      state: 'running',
+      interruptReason: null,
+      total: checked,
+      toAnswer: unreplied.length,
+      handled: 0,
+      queued: 0,
+      dropped: 0,
+      skipped: 0,
+      delaySeconds: delayMs / 1000,
+      startedAt: new Date(startedAt).toISOString(),
+      // the first comment goes at once, then one every pause
+      estimatedEndAt: new Date(
+        startedAt + (unreplied.length - 1) * delayMs,
+      ).toISOString(),
+      endedAt: null,
+      startedBy: { id: actor.id, name: actor.name },
+      stoppedBy: null,
+    };
+
+    try {
+      // recorded before anything is sent: a run must never go unrecorded (FR-019)
+      await this.clients.recordReplyRun(
+        { id: client.id, name: client.name },
+        'REPLY_RUN_STARTED',
+        actor,
+        {
+          runId: run.id,
+          platform,
+          accountId,
+          postId,
+          toAnswer: unreplied.length,
+        },
+      );
+      await this.store.create(run);
+    } catch (err) {
+      await this.release(ref);
+      throw err;
+    }
+
+    this.logger.log(
+      `Backfill run ${run.id} started on ${platform}:${postId} by admin ${actor.id}: ${unreplied.length}/${checked} comments without a reply`,
+    );
+    this.active.set(run.id, ref);
+    void this.feed(run, unreplied, token, delayMs);
+
+    return {
+      platform,
+      postId,
+      total: checked,
+      pending: unreplied.length,
+      delaySeconds: delayMs / 1000,
+      run: publicRun(run),
+    };
   }
 
-  /** Same filters as the live webhooks, plus "the page hasn't replied yet". */
-  private needsReply(
-    c: PostComment,
+  /** The run's state and progress. A run that lost its worker is reported as interrupted. */
+  async getRun(runId: string): Promise<BackfillRun> {
+    const run = await this.store.get(runId);
+    if (!run) throw runNotFound();
+    return publicRun(await this.settle(run));
+  }
+
+  /**
+   * Stops a run: no further comment is started, and the one being handled is completed.
+   * The post is free for a new run right away. Recorded in the activity record.
+   */
+  async stopRun(runId: string, actor: ClientActor): Promise<BackfillRun> {
+    const run = await this.store.get(runId);
+    if (!run) throw runNotFound();
+
+    const previous = await this.store.stop(run, actor, this.resultTtlSec());
+    if (previous === null) throw runNotFound();
+    if (previous !== 'running') {
+      throw new ConflictException({
+        message: 'This run has already ended',
+        errorCode: 'BACKFILL_RUN_ENDED',
+        details: { state: previous },
+      });
+    }
+
+    const stopped = (await this.store.get(runId)) ?? {
+      ...run,
+      state: 'stopped' as const,
+    };
+    try {
+      await this.clients.recordReplyRun(
+        { id: run.clientId, name: run.clientName },
+        'REPLY_RUN_STOPPED',
+        actor,
+        {
+          runId,
+          platform: run.platform,
+          accountId: run.accountId,
+          postId: run.postId,
+          toAnswer: run.toAnswer,
+          handled: stopped.handled,
+        },
+      );
+    } catch (err) {
+      // the run stays stopped: stopping is the safe direction. The admin sees the failure.
+      this.logger.error(
+        `Backfill run ${runId} was stopped but recording it failed: ${(err as Error).message}`,
+      );
+      throw err;
+    }
+    this.logger.log(
+      `Backfill run ${runId} stopped by admin ${actor.id}: handled ${stopped.handled} of ${run.toAnswer}`,
+    );
+    return publicRun(stopped);
+  }
+
+  /** The latest run of each post, for the posts list. */
+  async latestRuns(
     platform: Platform,
-    accountId: string,
-  ): boolean {
-    if (c.senderId === accountId) return false; // the page's own comment
-    if (c.hidden) return false; // already moderated
-    if (platform === 'instagram' && !c.text) return false; // same as the IG webhook
-    return !c.replierIds.includes(accountId);
+    postIds: string[],
+  ): Promise<Map<string, BackfillRun>> {
+    const found = await this.store.latestForPosts(platform, postIds);
+    const out = new Map<string, BackfillRun>();
+    for (const [postId, run] of found) {
+      out.set(postId, publicRun(await this.settle(run)));
+    }
+    return out;
+  }
+
+  /**
+   * A run that is `running` but whose lock is gone lost its worker (the process died): it becomes
+   * `interrupted` the first time anyone looks at it.
+   */
+  private async settle(run: StoredRun): Promise<StoredRun> {
+    if (run.state !== 'running') return run;
+    const changed = await this.store.markStaleIfLockLost(
+      run,
+      this.resultTtlSec(),
+    );
+    return changed ? ((await this.store.get(run.id)) ?? run) : run;
+  }
+
+  private async release(run: RunRef): Promise<void> {
+    await this.store.releaseLock(run).catch((err: Error) => {
+      // it expires on its own; nothing else to do
+      this.logger.warn(`Could not free the lock of ${run.id}: ${err.message}`);
+    });
   }
 
   /** Pushes one comment, waits, pushes the next. Never throws. */
   private async feed(
-    key: string,
+    run: StoredRun,
     comments: PostComment[],
-    target: { platform: Platform; accountId: string; postId: string },
+    token: string,
     delayMs: number,
   ): Promise<void> {
-    let queued = 0;
+    const ttl = this.resultTtlSec();
     try {
       for (const [i, c] of comments.entries()) {
         if (i > 0 && delayMs > 0) await sleep(delayMs);
-        if (this.stopped) break; // checked after the wait: shutdown may happen during it
+        // checked after the wait: shutdown may happen during it. onModuleDestroy marks the run
+        // interrupted; if Redis is already closed, the lock expiring does it.
+        if (this.stopped) return;
 
-        const item: InboxItem = {
-          kind: 'comment',
-          platform: target.platform,
-          id: c.id,
-          accountId: target.accountId,
-          senderId: c.senderId,
-          text: c.text,
-          postId: target.postId,
-          // enqueue time, not comment time: an old timestamp would jump ahead of live comments
-          timestamp: Date.now(),
-          raw: { source: 'backfill', createdAt: c.createdAt },
-        };
-        if (await this.inbox.push(item, { skipRateLimit: true })) queued++;
+        try {
+          if (!(await this.step(run, c, token, delayMs + LOCK_GRACE_MS, ttl))) {
+            return;
+          }
+        } catch (err) {
+          this.logger.error(
+            `Backfill run ${run.id}: comment ${c.id} failed: ${(err as Error).message}`,
+          );
+          await this.store.incr(run.id, 'skipped').catch(() => undefined);
+        }
       }
+      await this.store.end(run, 'finished', null, ttl);
+      this.logger.log(`Backfill run ${run.id} finished`);
     } catch (err) {
-      this.logger.error(`Backfill ${key} failed: ${(err as Error).message}`);
-    } finally {
-      this.running.delete(key);
-      this.logger.log(
-        `Backfill ${key} done: ${queued}/${comments.length} queued (the rest were duplicates or blocked)`,
+      this.logger.error(
+        `Backfill run ${run.id} failed: ${(err as Error).message}`,
       );
+    } finally {
+      this.active.delete(run.id);
     }
   }
 
-  /** All top-level comments of the post, following pagination up to COMMENT_BACKFILL_MAX. */
-  async fetchComments(
-    platform: Platform,
-    postId: string,
+  /** Handles one comment. False means the run is over (or no longer ours) and the loop must exit. */
+  private async step(
+    run: StoredRun,
+    c: PostComment,
     token: string,
-  ): Promise<PostComment[]> {
-    const max = this.num('COMMENT_BACKFILL_MAX', 500);
-    // Instagram also goes through graph.facebook.com with the Page token, like CommentReplyService
-    const base = this.graph.host('facebook');
-    const params =
-      platform === 'facebook'
-        ? new URLSearchParams({
-            fields:
-              'id,message,created_time,is_hidden,from{id},comments.limit(100){from{id}}',
-            filter: 'toplevel',
-            order: 'reverse_chronological',
-            limit: '100',
-          })
-        : new URLSearchParams({
-            fields:
-              'id,text,timestamp,hidden,from{id},replies.limit(50){from{id}}',
-            limit: '50',
-          });
+    lockTtlMs: number,
+    ttl: number,
+  ): Promise<boolean> {
+    // stopped, from any instance
+    if ((await this.store.get(run.id))?.state !== 'running') return false;
+    // lost the lock (it expired): someone else may be running the post, and the stale check will
+    // report this run as interrupted
+    if (!(await this.store.renewLock(run, lockTtlMs))) return false;
 
-    const normalize = platform === 'facebook' ? fromFacebook : fromInstagram;
-    const out: PostComment[] = [];
-    let url: string | undefined =
-      `${base}/${postId}/comments?${params.toString()}`;
-
-    while (url && out.length < max) {
-      const page: Page<FacebookComment & InstagramComment> =
-        await this.graph.get(url, token);
-      out.push(...(page.data ?? []).map(normalize));
-      url = page.paging?.next;
+    const reason = await this.interruption(run);
+    if (reason) {
+      await this.interrupt(run, reason, ttl);
+      return false;
     }
-    return out.slice(0, max);
+
+    let outcome: Awaited<ReturnType<PostCommentsService['recheck']>>;
+    try {
+      outcome = await this.postComments.recheck(
+        run.platform,
+        run.accountId,
+        c.id,
+        token,
+      );
+    } catch (err) {
+      if (!isAccessError(err)) throw err;
+      // every following check would fail the same way
+      await this.interrupt(run, 'META_ACCESS_LOST', ttl);
+      return false;
+    }
+    if (outcome !== 'needs_reply') {
+      this.logger.debug(`Backfill run ${run.id}: skipped ${c.id} (${outcome})`);
+      await this.store.incr(run.id, 'skipped');
+      return true;
+    }
+
+    const item: InboxItem = {
+      kind: 'comment',
+      platform: run.platform,
+      id: c.id,
+      accountId: run.accountId,
+      senderId: c.senderId,
+      text: c.text,
+      postId: run.postId,
+      // enqueue time, not comment time: an old timestamp would jump ahead of live comments
+      timestamp: Date.now(),
+      raw: { source: 'backfill', createdAt: c.createdAt },
+    };
+    const queued = await this.inbox.push(item, { skipRateLimit: true });
+    await this.store.incr(run.id, queued ? 'queued' : 'dropped');
+    return true;
   }
+
+  /** Why the run can't go on, from the client's current settings, or null. */
+  private async interruption(run: StoredRun): Promise<InterruptReason | null> {
+    let client: Awaited<ReturnType<ClientsService['findById']>>;
+    try {
+      client = await this.clients.findById(run.clientId);
+    } catch (err) {
+      if (err instanceof NotFoundException) return 'ACCOUNT_DISCONNECTED';
+      throw err;
+    }
+    const accountId =
+      run.platform === 'facebook' ? client.fbPageId : client.instaAccountId;
+    if (accountId !== run.accountId) return 'ACCOUNT_DISCONNECTED';
+    if (!client.commentReplyConfig.enabled) return 'COMMENT_REPLIES_DISABLED';
+    return null;
+  }
+
+  private async interrupt(
+    run: StoredRun,
+    reason: InterruptReason,
+    ttl: number,
+  ): Promise<void> {
+    if (await this.store.end(run, 'interrupted', reason, ttl)) {
+      this.logger.warn(`Backfill run ${run.id} interrupted: ${reason}`);
+    }
+  }
+}
+
+const runNotFound = () =>
+  new NotFoundException({
+    message: 'Run not found, or it ended more than a day ago',
+    errorCode: 'BACKFILL_RUN_NOT_FOUND',
+  });
+
+/** The client's name is kept for the activity record only; it is never returned. */
+function publicRun(stored: StoredRun): BackfillRun {
+  const run: Partial<StoredRun> = { ...stored };
+  delete run.clientName;
+  return run as BackfillRun;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -293,26 +514,3 @@ export function toHttpError(
     details,
   });
 }
-
-const toMs = (iso?: string) => (iso ? Date.parse(iso) || 0 : 0);
-
-const replierIds = (page?: Page<{ from?: { id: string } }>) =>
-  (page?.data ?? []).map((r) => r.from?.id).filter((id): id is string => !!id);
-
-const fromFacebook = (c: FacebookComment): PostComment => ({
-  id: c.id,
-  text: c.message,
-  senderId: c.from?.id,
-  createdAt: toMs(c.created_time),
-  hidden: c.is_hidden === true,
-  replierIds: replierIds(c.comments),
-});
-
-const fromInstagram = (c: InstagramComment): PostComment => ({
-  id: c.id,
-  text: c.text,
-  senderId: c.from?.id,
-  createdAt: toMs(c.timestamp),
-  hidden: c.hidden === true,
-  replierIds: replierIds(c.replies),
-});

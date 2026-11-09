@@ -1,0 +1,37 @@
+$kind: http-request
+description: |-
+  Counts the comments on one post that the account has not answered. **Requires:** `ADMIN` role (403 otherwise).
+
+  Uses the same rule as a reply run, so the count equals the `pending` of **Backfill Unanswered Comments** started right after: a top-level comment that is not written by the account, is not hidden, has no reply from the account and, on Instagram, has text. A comment that only another customer replied to still counts.
+
+  Reads at most `COMMENT_BACKFILL_MAX` (500) comments. When the post has more, `truncated` is `true` and the count is a minimum.
+
+  Uses `{{clientId}}` and `{{postId}}` (saved by **List Client Posts**). On Facebook the post id must belong to the client's page (`{fbPageId}_…`).
+
+  **Query:** `platform` (`facebook` or `instagram`, required).
+
+  **Responses**
+  - `200` `{ postId, platform, checked, unrepliedCount, truncated, checkedAt }`.
+  - `404` `NOT_FOUND`, `ACCOUNT_NOT_CONNECTED`, or `META_POST_NOT_FOUND` (deleted, or another account's post).
+  - `400` `BAD_REQUEST`, `META_TOKEN_INVALID` or `META_PERMISSION_DENIED`; `422` `INPUT_VALIDATION_ERROR`; `502` `META_ERROR`; `503` `META_UNAVAILABLE`.
+url: "{{baseUrl}}/clients/:id/posts/:postId/unreplied-count?platform=facebook"
+method: GET
+pathVariables:
+  id: "{{clientId}}"
+  postId: "{{postId}}"
+queryParams:
+  - key: platform
+    value: facebook
+    disabled: false
+    description: facebook or instagram
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));
+      const json = pm.response.json();
+      pm.test('Returns the count and whether it is a minimum', () => {
+        pm.expect(json).to.have.property('unrepliedCount');
+        pm.expect(json).to.have.property('truncated');
+      });
+    language: text/javascript
+order: 8000

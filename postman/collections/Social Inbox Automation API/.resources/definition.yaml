@@ -16,6 +16,8 @@ description: |-
   | `userEmail` | Email for login / user lookup |
   | `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |
   | `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |
+  | `postId`, `nextCursor` | Saved by **Clients → List Client Posts**: the first post's id and the next page's cursor |
+  | `runId` | Saved by **Inbox → Backfill Unanswered Comments**: the reply run's id |
   | `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |
   | `metaVerifyToken` | Must equal server webhook verify token |
   | `metaAppSecret` | Meta app secret used to sign webhook payloads |
@@ -33,6 +35,9 @@ variables:
   offerId: ""
   serviceId: ""
   resourceId: ""
+  postId: ""
+  nextCursor: ""
+  runId: ""
   n8nWebhookSecret: change-me
   metaVerifyToken: change-me
   metaAppSecret: change-me

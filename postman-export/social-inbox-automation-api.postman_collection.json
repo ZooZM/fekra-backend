@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "1c530d55-62c9-55df-a8ae-e41f4db4c437",
     "name": "Social Inbox Automation API",
-    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
+    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `postId`, `nextCursor` | Saved by **Clients → List Client Posts**: the first post's id and the next page's cursor |\n| `runId` | Saved by **Inbox → Backfill Unanswered Comments**: the reply run's id |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -828,6 +828,125 @@
               ]
             },
             "description": "Replaces the client's access token (write-only). **Requires:** `ADMIN` role.\n\n**Body:** `{ \"token\": string }`, 1 to 4096 characters after trimming. An empty token returns `422`; an unknown client `404`.\n\nThe response body is empty and the token is never returned by any endpoint. The client's `version` does **not** change. An `ACCESS_TOKEN_REPLACED` activity entry is recorded without the value.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
+          },
+          "response": []
+        },
+        {
+          "id": "eac51f71-844b-5770-a85e-72ba22115a9b",
+          "name": "List Client Posts (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has posts and a paging cursor field', () => {",
+                  "  pm.expect(json).to.have.property('data');",
+                  "  pm.expect(json.meta).to.have.property('nextCursor');",
+                  "});",
+                  "if (json.data && json.data.length) pm.collectionVariables.set('postId', json.data[0].id);",
+                  "pm.collectionVariables.set('nextCursor', json.meta && json.meta.nextCursor ? json.meta.nextCursor : '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id/posts?platform=facebook&limit=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id",
+                "posts"
+              ],
+              "query": [
+                {
+                  "key": "platform",
+                  "value": "facebook",
+                  "description": "facebook or instagram"
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "description": "Page size, 1 to 25"
+                },
+                {
+                  "key": "after",
+                  "value": "{{nextCursor}}",
+                  "description": "meta.nextCursor of the previous page",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{clientId}}"
+                }
+              ]
+            },
+            "description": "Lists one page of a client's posts on Facebook or Instagram, newest first, read live from Meta (nothing is stored). **Requires:** `ADMIN` role (403 otherwise).\n\nUses `{{clientId}}` (the client's id, not a Facebook page id). The unreplied count of each post is a separate request: **Count Unreplied Comments**.\n\n**Query:** `platform` (`facebook` or `instagram`, required), `limit` (1 to 25, default 25), `after` (the previous page's `meta.nextCursor`).\n\n**Responses**\n- `200` `{ data: ClientPost[], meta: { limit, nextCursor, fetchedAt } }`. `nextCursor` is `null` on the last page. Meta gives no totals, so this list does not use `page`/`totalPages`.\n- `404` `NOT_FOUND` (no such client) or `ACCOUNT_NOT_CONNECTED` (the client has no account on that platform, or Meta cannot find it with the client's token).\n- `400` `BAD_REQUEST` (no access token on file), `META_TOKEN_INVALID` (expired or revoked: replace it with **Set Client Access Token**) or `META_PERMISSION_DENIED`.\n- `422` `INPUT_VALIDATION_ERROR`: bad `platform`, `limit` or `after`, or a client id that is not a UUID.\n- `502` `META_ERROR`, `503` `META_UNAVAILABLE` (Meta is down or rate-limiting; try again later). `details` carries Meta's `graphCode` / `graphSubcode`."
+          },
+          "response": []
+        },
+        {
+          "id": "549292bf-bf26-57ca-a2df-e1c6f75062c2",
+          "name": "Count Unreplied Comments (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns the count and whether it is a minimum', () => {",
+                  "  pm.expect(json).to.have.property('unrepliedCount');",
+                  "  pm.expect(json).to.have.property('truncated');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id/posts/:postId/unreplied-count?platform=facebook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id",
+                "posts",
+                ":postId",
+                "unreplied-count"
+              ],
+              "query": [
+                {
+                  "key": "platform",
+                  "value": "facebook",
+                  "description": "facebook or instagram"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{clientId}}"
+                },
+                {
+                  "key": "postId",
+                  "value": "{{postId}}"
+                }
+              ]
+            },
+            "description": "Counts the comments on one post that the account has not answered. **Requires:** `ADMIN` role (403 otherwise).\n\nUses the same rule as a reply run, so the count equals the `pending` of **Backfill Unanswered Comments** started right after: a top-level comment that is not written by the account, is not hidden, has no reply from the account and, on Instagram, has text. A comment that only another customer replied to still counts.\n\nReads at most `COMMENT_BACKFILL_MAX` (500) comments. When the post has more, `truncated` is `true` and the count is a minimum.\n\nUses `{{clientId}}` and `{{postId}}` (saved by **List Client Posts**). On Facebook the post id must belong to the client's page (`{fbPageId}_…`).\n\n**Query:** `platform` (`facebook` or `instagram`, required).\n\n**Responses**\n- `200` `{ postId, platform, checked, unrepliedCount, truncated, checkedAt }`.\n- `404` `NOT_FOUND`, `ACCOUNT_NOT_CONNECTED`, or `META_POST_NOT_FOUND` (deleted, or another account's post).\n- `400` `BAD_REQUEST`, `META_TOKEN_INVALID` or `META_PERMISSION_DENIED`; `422` `INPUT_VALIDATION_ERROR`; `502` `META_ERROR`; `503` `META_UNAVAILABLE`."
           },
           "response": []
         }
@@ -1718,7 +1837,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status is 202', () => pm.response.to.have.status(202));",
-                  "pm.test('Returns the pending count', () => pm.expect(pm.response.json()).to.have.property('pending'));"
+                  "const json = pm.response.json();",
+                  "pm.test('Returns the pending count and the run to follow', () => {",
+                  "  pm.expect(json).to.have.property('pending');",
+                  "  pm.expect(json).to.have.property('run');",
+                  "});",
+                  "if (json.run && json.run.id) pm.collectionVariables.set('runId', json.run.id);"
                 ]
               }
             }
@@ -1734,7 +1858,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{pageId}}\",\n  \"postId\": \"{{pageId}}_100000000000001\"\n}",
+              "raw": "{\n  \"accountId\": \"{{pageId}}\",\n  \"postId\": \"{{postId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1752,7 +1876,96 @@
                 "backfill"
               ]
             },
-            "description": "Replies to the comments on a post that the page never answered (replaces the Telegram \"reply to old comments\" n8n workflow).\n\nFetches the post's top-level comments, keeps the ones that are not from the page, not hidden and have no reply from the page, then feeds them newest first into the inbox, one every `COMMENT_BACKFILL_DELAY_MS` (default 5000). Each one goes through the normal comment flow: classifier, Gemini if unsure, then reply / DM / like / hide.\n\n**Requires:** `ADMIN` role (returns 403 otherwise).\n\n**Body:** `{ \"accountId\": string, \"postId\": string }`\n- `accountId`: Facebook Page ID or Instagram account ID. The platform is taken from the client that owns it.\n- `postId`: Facebook post ID (`{pageId}_{postId}`) or Instagram media ID.\n\n**Responses:**\n- `202` `{ platform, postId, total, pending, delaySeconds }`: the run continues in the background.\n- `404` no client owns `accountId`; `400` the client has no access token; `409` a run is already in progress for this post.\n- Meta errors (`details` has Meta's `graphCode` / `graphSubcode`):\n  - `404 META_POST_NOT_FOUND`: the post isn't on this page or the token can't see it. Use the `post_id` from a comment webhook.\n  - `400 META_TOKEN_INVALID`: the client's token is expired or revoked.\n  - `400 META_PERMISSION_DENIED`: the token is missing a permission.\n  - `503 META_UNAVAILABLE`: Meta is down; try again later.\n  - `502 META_ERROR`: any other Meta rejection."
+            "description": "Starts a **reply run** on a post: replies to the comments the page never answered (replaces the Telegram \"reply to old comments\" n8n workflow). **Requires:** `ADMIN` role (403 otherwise).\n\nFetches the post's top-level comments, keeps the ones that are not from the page, not hidden and have no reply from the page, then feeds them newest first into the inbox, one every `COMMENT_BACKFILL_DELAY_MS` (default 5000). Just before each one, the run checks that it was not stopped, that the client still has comment replies on, and that the comment still needs a reply (not answered, hidden or deleted since the run started). Each one then goes through the normal comment flow: classifier, Gemini if unsure, then reply / DM / like / hide.\n\nThe run is recorded in the activity record (`REPLY_RUN_STARTED`) and can be followed with **Get Backfill Run** and stopped with **Stop Backfill Run**. Only one run per post can be in progress.\n\n**Body:** `{ \"accountId\": string, \"postId\": string }`\n- `accountId`: Facebook Page ID or Instagram account ID. The platform is taken from the client that owns it.\n- `postId`: Facebook post ID (`{pageId}_{postId}`) or Instagram media ID. `{{postId}}` is saved by **Clients → List Client Posts**; use the same Facebook page as `{{pageId}}`.\n\n**Responses:**\n- `202` `{ platform, postId, total, pending, delaySeconds, run }`: the run continues in the background. `run` is the run to follow (saved to `{{runId}}`), or `null` when `pending` is `0`: nothing starts and nothing is recorded.\n- `404` no client owns `accountId`.\n- `400` `BAD_REQUEST` the client has no access token.\n- `409` `COMMENT_REPLIES_DISABLED` the client's comment replies are turned off (nothing would be posted).\n- `409` `CONFLICT` a run is already in progress for this post; `details.runId` is that run.\n- Meta errors (`details` has Meta's `graphCode` / `graphSubcode`):\n  - `404 META_POST_NOT_FOUND`: the post isn't on this page or the token can't see it. Use the `post_id` from a comment webhook.\n  - `400 META_TOKEN_INVALID`: the client's token is expired or revoked.\n  - `400 META_PERMISSION_DENIED`: the token is missing a permission.\n  - `503 META_UNAVAILABLE`: Meta is down; try again later.\n  - `502 META_ERROR`: any other Meta rejection."
+          },
+          "response": []
+        },
+        {
+          "id": "341fd7a4-adc1-542a-ad21-e7bc083eb45b",
+          "name": "Get Backfill Run (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has a state and the handled counter', () => {",
+                  "  pm.expect(json).to.have.property('state');",
+                  "  pm.expect(json.handled).to.eql(json.queued + json.dropped + json.skipped);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inbox/comments/backfill/runs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inbox",
+                "comments",
+                "backfill",
+                "runs",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{runId}}"
+                }
+              ]
+            },
+            "description": "Reads a reply run's progress or outcome. **Requires:** `ADMIN` role (403 otherwise).\n\nUses `{{runId}}` (saved by **Backfill Unanswered Comments**). The dashboard polls this every 5 seconds while `state` is `running`.\n\n**Response `200`:** `{ id, clientId, accountId, platform, postId, state, interruptReason, total, toAnswer, handled, queued, dropped, skipped, delaySeconds, startedAt, estimatedEndAt, endedAt, startedBy, stoppedBy }`\n- `state`: `running`, `finished`, `stopped` or `interrupted`. An ended run stays readable for 24 hours (`COMMENT_BACKFILL_RESULT_TTL_SEC`).\n- `handled = queued + dropped + skipped`, out of `toAnswer`. `queued`: accepted by the inbox. `dropped`: refused by the inbox (a duplicate or a blocked sender). `skipped`: answered, hidden or deleted since the run started, or the re-check failed.\n- `interruptReason` (when `interrupted`): `SERVER_RESTART` (the server died mid-run: reported once the run's lock expires, about a minute after the last comment), `COMMENT_REPLIES_DISABLED`, `ACCOUNT_DISCONNECTED` (the client was deleted or lost the account) or `META_ACCESS_LOST` (Meta rejected the client's token).\n\n**Other responses:** `404` `BACKFILL_RUN_NOT_FOUND` (unknown id, or ended more than 24 hours ago); `422` `INPUT_VALIDATION_ERROR` (the id is not a UUID)."
+          },
+          "response": []
+        },
+        {
+          "id": "c1d1b152-0721-5e78-ae37-d9a72f7c499d",
+          "name": "Stop Backfill Run (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 409]', () => pm.expect([200, 409]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('The run is stopped', () => pm.expect(pm.response.json().state).to.eql('stopped'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/inbox/comments/backfill/runs/:id/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "inbox",
+                "comments",
+                "backfill",
+                "runs",
+                ":id",
+                "stop"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{runId}}"
+                }
+              ]
+            },
+            "description": "Stops a running reply run. **Requires:** `ADMIN` role (403 otherwise). Any admin can stop any run.\n\nUses `{{runId}}` (saved by **Backfill Unanswered Comments**). No further comment is started; the one being handled, if any, is completed. The post is free for a new run right away, and comments not reached stay unreplied. A stopped run cannot be resumed: start a new one, which picks up what is still unreplied. The stop is recorded in the activity record (`REPLY_RUN_STOPPED`).\n\n**Responses**\n- `200` the run, now `state: stopped`, with `stoppedBy` and the number `handled` so far.\n- `404` `BACKFILL_RUN_NOT_FOUND` (unknown id, or ended more than 24 hours ago).\n- `409` `BACKFILL_RUN_ENDED` the run had already ended; `details.state` is its final state (`finished`, `stopped` or `interrupted`). Nothing changes.\n- `422` `INPUT_VALIDATION_ERROR` the id is not a UUID."
           },
           "response": []
         }
@@ -2168,6 +2381,21 @@
     },
     {
       "key": "resourceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "postId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nextCursor",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "runId",
       "value": "",
       "type": "string"
     },

@@ -157,6 +157,663 @@
         ],
         "type": "object"
       },
+      "BackfillRunDto": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "clientId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "delaySeconds": {
+            "type": "number"
+          },
+          "dropped": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "estimatedEndAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "handled": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "interruptReason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SERVER_RESTART",
+                  "COMMENT_REPLIES_DISABLED",
+                  "ACCOUNT_DISCONNECTED",
+                  "META_ACCESS_LOST"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "platform": {
+            "enum": [
+              "facebook",
+              "instagram"
+            ],
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "queued": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skipped": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "startedBy": {
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "type": "object"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "finished",
+              "stopped",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          "stoppedBy": {
+            "anyOf": [
+              {
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toAnswer": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "clientId",
+          "accountId",
+          "platform",
+          "postId",
+          "state",
+          "interruptReason",
+          "total",
+          "toAnswer",
+          "handled",
+          "queued",
+          "dropped",
+          "skipped",
+          "delaySeconds",
+          "startedAt",
+          "estimatedEndAt",
+          "endedAt",
+          "startedBy",
+          "stoppedBy"
+        ],
+        "type": "object"
+      },
+      "BackfillStartResultDto": {
+        "properties": {
+          "delaySeconds": {
+            "type": "number"
+          },
+          "pending": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "platform": {
+            "enum": [
+              "facebook",
+              "instagram"
+            ],
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "clientId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "delaySeconds": {
+                    "type": "number"
+                  },
+                  "dropped": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "endedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "estimatedEndAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "handled": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "interruptReason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "SERVER_RESTART",
+                          "COMMENT_REPLIES_DISABLED",
+                          "ACCOUNT_DISCONNECTED",
+                          "META_ACCESS_LOST"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "platform": {
+                    "enum": [
+                      "facebook",
+                      "instagram"
+                    ],
+                    "type": "string"
+                  },
+                  "postId": {
+                    "type": "string"
+                  },
+                  "queued": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "skipped": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "startedAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "startedBy": {
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name"
+                    ],
+                    "type": "object"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "finished",
+                      "stopped",
+                      "interrupted"
+                    ],
+                    "type": "string"
+                  },
+                  "stoppedBy": {
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "id": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "toAnswer": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "clientId",
+                  "accountId",
+                  "platform",
+                  "postId",
+                  "state",
+                  "interruptReason",
+                  "total",
+                  "toAnswer",
+                  "handled",
+                  "queued",
+                  "dropped",
+                  "skipped",
+                  "delaySeconds",
+                  "startedAt",
+                  "estimatedEndAt",
+                  "endedAt",
+                  "startedBy",
+                  "stoppedBy"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "platform",
+          "postId",
+          "total",
+          "pending",
+          "delaySeconds",
+          "run"
+        ],
+        "type": "object"
+      },
+      "ClientPostPageDto": {
+        "properties": {
+          "data": {
+            "items": {
+              "properties": {
+                "commentsCount": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "permalink": {
+                  "type": "string"
+                },
+                "platform": {
+                  "enum": [
+                    "facebook",
+                    "instagram"
+                  ],
+                  "type": "string"
+                },
+                "publishedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "replyRun": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "accountId": {
+                          "type": "string"
+                        },
+                        "clientId": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "delaySeconds": {
+                          "type": "number"
+                        },
+                        "dropped": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "endedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "estimatedEndAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "handled": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "interruptReason": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "SERVER_RESTART",
+                                "COMMENT_REPLIES_DISABLED",
+                                "ACCOUNT_DISCONNECTED",
+                                "META_ACCESS_LOST"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "platform": {
+                          "enum": [
+                            "facebook",
+                            "instagram"
+                          ],
+                          "type": "string"
+                        },
+                        "postId": {
+                          "type": "string"
+                        },
+                        "queued": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "skipped": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "startedAt": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                          "type": "string"
+                        },
+                        "startedBy": {
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "type": "object"
+                        },
+                        "state": {
+                          "enum": [
+                            "running",
+                            "finished",
+                            "stopped",
+                            "interrupted"
+                          ],
+                          "type": "string"
+                        },
+                        "stoppedBy": {
+                          "anyOf": [
+                            {
+                              "properties": {
+                                "id": {
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "toAnswer": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "clientId",
+                        "accountId",
+                        "platform",
+                        "postId",
+                        "state",
+                        "interruptReason",
+                        "total",
+                        "toAnswer",
+                        "handled",
+                        "queued",
+                        "dropped",
+                        "skipped",
+                        "delaySeconds",
+                        "startedAt",
+                        "estimatedEndAt",
+                        "endedAt",
+                        "startedBy",
+                        "stoppedBy"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "text": {
+                  "anyOf": [
+                    {
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "textTruncated": {
+                  "type": "boolean"
+                },
+                "thumbnailUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "platform",
+                "publishedAt",
+                "text",
+                "textTruncated",
+                "thumbnailUrl",
+                "permalink",
+                "commentsCount",
+                "replyRun"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "properties": {
+              "fetchedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "limit": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              "nextCursor": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "limit",
+              "nextCursor",
+              "fetchedAt"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "type": "object"
+      },
       "ClientRecordDto": {
         "properties": {
           "aiConfig": {
@@ -1258,6 +1915,47 @@
         ],
         "type": "object"
       },
+      "UnrepliedCountDto": {
+        "properties": {
+          "checked": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "facebook",
+              "instagram"
+            ],
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "unrepliedCount": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "postId",
+          "platform",
+          "checked",
+          "unrepliedCount",
+          "truncated",
+          "checkedAt"
+        ],
+        "type": "object"
+      },
       "UpdateClientDto": {
         "additionalProperties": false,
         "properties": {
@@ -2075,6 +2773,125 @@
         ]
       }
     },
+    "/clients/{id}/posts": {
+      "get": {
+        "operationId": "ClientPostsController_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "enum": [
+                "facebook",
+                "instagram"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_\\-=]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPostPageDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "ClientPosts"
+        ]
+      }
+    },
+    "/clients/{id}/posts/{postId}/unreplied-count": {
+      "get": {
+        "operationId": "ClientPostsController_unrepliedCount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "postId",
+            "required": true,
+            "schema": {
+              "pattern": "^\\d{5,30}(_\\d{5,30})?$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "enum": [
+                "facebook",
+                "instagram"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnrepliedCountDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "ClientPosts"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_check",
@@ -2105,6 +2922,77 @@
         },
         "responses": {
           "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillStartResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "CommentBackfill"
+        ]
+      }
+    },
+    "/inbox/comments/backfill/runs/{id}": {
+      "get": {
+        "operationId": "CommentBackfillController_getRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillRunDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "CommentBackfill"
+        ]
+      }
+    },
+    "/inbox/comments/backfill/runs/{id}/stop": {
+      "post": {
+        "operationId": "CommentBackfillController_stopRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillRunDto"
+                }
+              }
+            },
             "description": ""
           }
         },

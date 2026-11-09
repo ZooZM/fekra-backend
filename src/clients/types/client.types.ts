@@ -47,3 +47,12 @@ export type ClientUpdateResult =
   | ({ status: 'conflict' } & VersionConflictDetails);
 
 export type AccountField = 'fbPageId' | 'instaAccountId';
+
+/** The activity actions of a reply run on a post's unreplied comments. */
+export type ReplyRunAction = 'REPLY_RUN_STARTED' | 'REPLY_RUN_STOPPED';
+
+/** What an activity entry needs to name a client: it keeps the name, so it outlives the client. */
+export interface ClientRef {
+  id: string;
+  name: string;
+}

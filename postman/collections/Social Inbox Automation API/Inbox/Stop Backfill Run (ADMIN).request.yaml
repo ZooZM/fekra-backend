@@ -1,0 +1,24 @@
+$kind: http-request
+description: |-
+  Stops a running reply run. **Requires:** `ADMIN` role (403 otherwise). Any admin can stop any run.
+
+  Uses `{{runId}}` (saved by **Backfill Unanswered Comments**). No further comment is started; the one being handled, if any, is completed. The post is free for a new run right away, and comments not reached stay unreplied. A stopped run cannot be resumed: start a new one, which picks up what is still unreplied. The stop is recorded in the activity record (`REPLY_RUN_STOPPED`).
+
+  **Responses**
+  - `200` the run, now `state: stopped`, with `stoppedBy` and the number `handled` so far.
+  - `404` `BACKFILL_RUN_NOT_FOUND` (unknown id, or ended more than 24 hours ago).
+  - `409` `BACKFILL_RUN_ENDED` the run had already ended; `details.state` is its final state (`finished`, `stopped` or `interrupted`). Nothing changes.
+  - `422` `INPUT_VALIDATION_ERROR` the id is not a UUID.
+url: "{{baseUrl}}/inbox/comments/backfill/runs/:id/stop"
+method: POST
+pathVariables:
+  id: "{{runId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 409]', () => pm.expect([200, 409]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        pm.test('The run is stopped', () => pm.expect(pm.response.json().state).to.eql('stopped'));
+      }
+    language: text/javascript
+order: 3000

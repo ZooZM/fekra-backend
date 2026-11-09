@@ -17,9 +17,15 @@ import {
   AccountField,
   ClientActor,
   ClientRecord,
+  ClientRef,
   ClientUpdateResult,
   ClientWorkflowData,
+  ReplyRunAction,
 } from '../types/client.types';
+import {
+  ReplyRunActivityDetails,
+  ReplyRunActivityDetailsSchema,
+} from '@common/zod/json-columns.schema';
 import { toClientRecord, toWorkflowData } from '../mappers/client.mapper';
 import { QueryClientInput } from '../schemas/query-client.schema';
 import { changedFields } from '../helpers/changed-fields';
@@ -29,13 +35,6 @@ export class ClientsRepository implements IClientsRepository {
   private readonly logger = new Logger(ClientsRepository.name);
 
   constructor(private readonly prisma: PrismaService) {}
-  async findByAccountId(accountId: string): Promise<ClientRecord | null> {
-    const row = await this.prisma.client.findFirst({
-      where: { OR: [{ fbPageId: accountId }, { instaAccountId: accountId }] },
-    });
-    return row ? toClientRecord(row) : null;
-  }
-
   async findAll(
     query: QueryClientInput,
   ): Promise<PaginatedResult<ClientRecord>> {
@@ -234,6 +233,22 @@ export class ClientsRepository implements IClientsRepository {
     };
   }
 
+  async recordReplyRunActivity(
+    client: ClientRef,
+    action: ReplyRunAction,
+    actor: ClientActor,
+    details: ReplyRunActivityDetails,
+  ): Promise<void> {
+    await this.recordActivity(this.prisma, {
+      action,
+      clientId: client.id,
+      clientName: client.name,
+      actor,
+      // the schema is this column's contract: fail here rather than store what can't be read back
+      details: ReplyRunActivityDetailsSchema.parse(details),
+    });
+  }
+
   private async recordActivity(
     tx: Prisma.TransactionClient,
     entry: {
@@ -242,6 +257,7 @@ export class ClientsRepository implements IClientsRepository {
       clientName: string;
       actor: ClientActor;
       changedFields?: string[];
+      details?: ReplyRunActivityDetails;
     },
   ): Promise<void> {
     await tx.clientActivity.create({
@@ -253,6 +269,7 @@ export class ClientsRepository implements IClientsRepository {
         actorName: entry.actor.name,
         actorEmail: entry.actor.email,
         changedFields: entry.changedFields ?? [],
+        details: entry.details,
       },
     });
   }

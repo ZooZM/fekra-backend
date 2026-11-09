@@ -1,0 +1,387 @@
+openapi: 3.1.0
+info:
+  title: Fekra Admin API (client posts and reply runs)
+  version: 1.1.0
+  description: |
+    Design contract for feature 002-client-posts-backfill. The OpenAPI document generated from
+    the Zod DTOs (`npm run openapi:export`) MUST match these paths and shapes.
+
+    Base URL: `/api` in production (stripped by Caddy before NestJS), as in feature 001.
+    Every operation requires a bearer token and the ADMIN role (401 / 403 otherwise).
+    Errors always use `ErrorBody`. Clients branch on `errorCode`, never on `message`.
+
+    Contract changes in this feature (justified in plan.md, Complexity Tracking):
+      - `GET /clients/{id}/posts` is replaced. The previous version never succeeded. It now
+        uses cursor paging (`meta.nextCursor`) instead of `PaginatedResult`, because Meta
+        exposes no totals.
+      - `GET /clients/{accountId}/posts/{postId}/reply` is removed (it started replies from a
+        GET and never validated its input).
+      - `POST /inbox/comments/backfill` adds `run` to its 202 body and `details.runId` to its
+        409 `CONFLICT`. It can now refuse with `409 COMMENT_REPLIES_DISABLED`.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+
+paths:
+  /clients/{id}/posts:
+    get:
+      operationId: ClientPostsController_list
+      summary: List a connected account's posts, newest first (FR-002 to FR-005, FR-009)
+      tags: [ClientPosts]
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+        - $ref: '#/components/parameters/Platform'
+        - name: after
+          in: query
+          required: false
+          description: '`meta.nextCursor` from the previous page.'
+          schema: { type: string, minLength: 1, maxLength: 512, pattern: '^[A-Za-z0-9_\-=]+$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 25, default: 25 }
+      responses:
+        '200':
+          description: One page of posts. Unreplied counts are fetched separately, per post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientPostPage' }
+        '400': { $ref: '#/components/responses/MetaAccessError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ClientOrAccountNotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '502': { $ref: '#/components/responses/MetaError' }
+        '503': { $ref: '#/components/responses/MetaUnavailable' }
+
+  /clients/{id}/posts/{postId}/unreplied-count:
+    get:
+      operationId: ClientPostsController_unrepliedCount
+      summary: Count the comments the account has not answered on one post (FR-006, FR-007, FR-024)
+      description: |
+        Uses the same rule as a reply run, so the count equals the run's `toAnswer` if a run
+        starts right after (SC-002). Reads at most `COMMENT_BACKFILL_MAX` (500) comments. When
+        the post has more, `truncated` is true and the count is a minimum.
+        On Facebook, `postId` must belong to the client's page (`{fbPageId}_…`).
+      tags: [ClientPosts]
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+        - $ref: '#/components/parameters/PostId'
+        - $ref: '#/components/parameters/Platform'
+      responses:
+        '200':
+          description: The count
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnrepliedCount' }
+        '400': { $ref: '#/components/responses/MetaAccessError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            `NOT_FOUND` (client), `ACCOUNT_NOT_CONNECTED`, or `META_POST_NOT_FOUND` (the post
+            was deleted, or belongs to another account).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '502': { $ref: '#/components/responses/MetaError' }
+        '503': { $ref: '#/components/responses/MetaUnavailable' }
+
+  /inbox/comments/backfill:
+    post:
+      operationId: CommentBackfillController_start
+      summary: Start a reply run on a post's unreplied comments (FR-011 to FR-016, FR-019)
+      description: |
+        Existing endpoint. The body and the existing response fields are unchanged.
+        Returns right away; the run continues in the background, one comment every
+        `delaySeconds`. When the post has no unreplied comment, nothing starts and `run` is null.
+      tags: [CommentBackfill]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentBackfillDto' }
+      responses:
+        '202':
+          description: Run started (or nothing to answer)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackfillStartResult' }
+        '400':
+          description: |
+            `BAD_REQUEST` (no access token on file), `META_TOKEN_INVALID` or
+            `META_PERMISSION_DENIED`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`NOT_FOUND` (no client owns `accountId`) or `META_POST_NOT_FOUND`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '409':
+          description: |
+            - `CONFLICT`: a run is already in progress on this post; `details.runId` is that run.
+            - `COMMENT_REPLIES_DISABLED`: the client's comment replies are turned off (new).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+              examples:
+                running:
+                  value:
+                    statusCode: 409
+                    message: A backfill is already running for this post
+                    errorCode: CONFLICT
+                    details: { runId: 3f0e1c2a-8a43-4c55-9b55-0d7b0c7b1e11 }
+                disabled:
+                  value:
+                    statusCode: 409
+                    message: Comment replies are turned off for this client
+                    errorCode: COMMENT_REPLIES_DISABLED
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '502': { $ref: '#/components/responses/MetaError' }
+        '503': { $ref: '#/components/responses/MetaUnavailable' }
+
+  /inbox/comments/backfill/runs/{id}:
+    get:
+      operationId: CommentBackfillController_getRun
+      summary: Read a reply run's progress or outcome (FR-017, FR-022)
+      description: |
+        The dashboard polls this every 5 seconds while `state` is `running`. A run that lost
+        its lock (process restart) is reported as `interrupted` / `SERVER_RESTART`.
+      tags: [CommentBackfill]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackfillRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`BACKFILL_RUN_NOT_FOUND`: unknown id, or ended more than 24 hours ago.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /inbox/comments/backfill/runs/{id}/stop:
+    post:
+      operationId: CommentBackfillController_stopRun
+      summary: Stop a running reply run (FR-021, FR-019)
+      description: |
+        No further comment from the run is started. The comment being handled, if any, is
+        completed. The post's lock is released immediately, so a new run can start.
+      tags: [CommentBackfill]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: The run, now `stopped`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackfillRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: '`BACKFILL_RUN_NOT_FOUND`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '409':
+          description: '`BACKFILL_RUN_ENDED`: the run had already ended; `details.state` is its final state.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RunId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PostId:
+      name: postId
+      in: path
+      required: true
+      description: Facebook post ID (`{pageId}_{postId}`) or Instagram media ID.
+      schema: { type: string, pattern: '^\d{5,30}(_\d{5,30})?$' }
+    Platform:
+      name: platform
+      in: query
+      required: true
+      schema: { type: string, enum: [facebook, instagram] }
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [statusCode, message, errorCode]
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+        errorCode: { type: string, description: Stable SCREAMING_SNAKE_CASE code }
+        details: {}
+
+    CommentBackfillDto:
+      type: object
+      additionalProperties: false
+      required: [accountId, postId]
+      properties:
+        accountId: { type: string, pattern: '^\d{5,30}$', description: Facebook Page ID or Instagram account ID }
+        postId: { type: string, pattern: '^\d{5,30}(_\d{5,30})?$' }
+
+    Actor:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
+    BackfillRun:
+      type: object
+      required: [id, clientId, accountId, platform, postId, state, interruptReason, total, toAnswer,
+                 handled, queued, dropped, skipped, delaySeconds, startedAt, estimatedEndAt,
+                 endedAt, startedBy, stoppedBy]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        accountId: { type: string }
+        platform: { type: string, enum: [facebook, instagram] }
+        postId: { type: string }
+        state: { type: string, enum: [running, finished, stopped, interrupted] }
+        interruptReason:
+          type: [string, 'null']
+          enum: [SERVER_RESTART, COMMENT_REPLIES_DISABLED, ACCOUNT_DISCONNECTED, META_ACCESS_LOST, null]
+        total: { type: integer, minimum: 0, description: Comments checked at start }
+        toAnswer: { type: integer, minimum: 1, description: N in "handled X of N" }
+        handled: { type: integer, minimum: 0, description: 'queued + dropped + skipped' }
+        queued: { type: integer, minimum: 0, description: Accepted by the inbox }
+        dropped: { type: integer, minimum: 0, description: Duplicate or blocked sender }
+        skipped: { type: integer, minimum: 0, description: Answered, hidden or deleted since start, or the re-check failed }
+        delaySeconds: { type: number }
+        startedAt: { type: string, format: date-time }
+        estimatedEndAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+        startedBy: { $ref: '#/components/schemas/Actor' }
+        stoppedBy:
+          oneOf:
+            - $ref: '#/components/schemas/Actor'
+            - type: 'null'
+
+    BackfillStartResult:
+      type: object
+      required: [platform, postId, total, pending, delaySeconds, run]
+      properties:
+        platform: { type: string, enum: [facebook, instagram] }
+        postId: { type: string }
+        total: { type: integer, minimum: 0 }
+        pending: { type: integer, minimum: 0, description: Same as run.toAnswer; 0 when nothing to answer }
+        delaySeconds: { type: number }
+        run:
+          description: New in this feature. Null when `pending` is 0.
+          oneOf:
+            - $ref: '#/components/schemas/BackfillRun'
+            - type: 'null'
+
+    ClientPost:
+      type: object
+      required: [id, platform, publishedAt, text, textTruncated, thumbnailUrl, permalink, commentsCount, replyRun]
+      properties:
+        id: { type: string }
+        platform: { type: string, enum: [facebook, instagram] }
+        publishedAt: { type: string, format: date-time }
+        text: { type: [string, 'null'], maxLength: 500 }
+        textTruncated: { type: boolean }
+        thumbnailUrl: { type: [string, 'null'], format: uri }
+        permalink: { type: string, format: uri }
+        commentsCount: { type: integer, minimum: 0, description: Display only; on Instagram it includes replies }
+        replyRun:
+          description: Latest run on this post, while running or for 24 hours after it ends.
+          oneOf:
+            - $ref: '#/components/schemas/BackfillRun'
+            - type: 'null'
+
+    ClientPostPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ClientPost' }
+        meta:
+          type: object
+          required: [limit, nextCursor, fetchedAt]
+          properties:
+            limit: { type: integer }
+            nextCursor: { type: [string, 'null'], description: Pass as `after` to load the next page; null on the last page }
+            fetchedAt: { type: string, format: date-time }
+
+    UnrepliedCount:
+      type: object
+      required: [postId, platform, checked, unrepliedCount, truncated, checkedAt]
+      properties:
+        postId: { type: string }
+        platform: { type: string, enum: [facebook, instagram] }
+        checked: { type: integer, minimum: 0, maximum: 500 }
+        unrepliedCount: { type: integer, minimum: 0 }
+        truncated: { type: boolean, description: True when the post has more comments than were checked }
+        checkedAt: { type: string, format: date-time }
+
+  responses:
+    Unauthorized:
+      description: '`UNAUTHORIZED`: missing, invalid or expired access token.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    Forbidden:
+      description: '`FORBIDDEN`: the user is not an ADMIN.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    ValidationError:
+      description: '`INPUT_VALIDATION_ERROR` with `details.fieldErrors`.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    ClientOrAccountNotFound:
+      description: |
+        `NOT_FOUND`: no such client. `ACCOUNT_NOT_CONNECTED`: the client has no account on this
+        platform, or Meta cannot find the saved account with the client's token (the account id
+        or the token is wrong).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    MetaAccessError:
+      description: |
+        `BAD_REQUEST` (no access token on file), `META_TOKEN_INVALID` (expired or revoked; replace
+        it with PUT /clients/{id}/access-token), or `META_PERMISSION_DENIED` (`message` names the
+        missing permission). `details` carries Meta's `graphCode` / `graphSubcode`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    MetaError:
+      description: '`META_ERROR`: Meta rejected the request for another reason.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }
+    MetaUnavailable:
+      description: '`META_UNAVAILABLE`: Meta is down or rate-limiting; retry later.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorBody' }

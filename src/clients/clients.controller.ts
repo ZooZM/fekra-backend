@@ -83,15 +83,4 @@ export class ClientsController {
   ) {
     return this.clientsService.setAccessToken(id, token, actorOf(user));
   }
-
-  // ------------------posts------------------
-  @Get(':id/posts')
-  getAllPosts(@Param() { id }: IdParamDto) {
-    return this.clientsService.getAllPosts(id);
-  }
-
-  @Get(':accountId/posts/:postId/reply')
-  replyToPost(@Param() { accountId, postId }) {
-    return this.clientsService.replyToPost(accountId, postId);
-  }
 }

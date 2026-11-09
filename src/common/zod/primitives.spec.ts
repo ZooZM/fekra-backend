@@ -1,8 +1,10 @@
 import {
   emailField,
+  graphCursor,
   httpUrl,
   IdParamSchema,
   metaId,
+  metaPostId,
   nameField,
   passwordField,
   replies,
@@ -23,6 +25,37 @@ describe('common zod primitives', () => {
     expect(metaId.safeParse('12345').success).toBe(true);
     expect(metaId.safeParse('1234').success).toBe(false);
     expect(metaId.safeParse('abcde').success).toBe(false);
+  });
+
+  it('accepts Meta post ids with or without the page prefix', () => {
+    expect(metaPostId.safeParse('12345').success).toBe(true);
+    expect(metaPostId.safeParse('12345_67890').success).toBe(true);
+    expect(metaPostId.parse('  12345_67890  ')).toBe('12345_67890');
+    for (const bad of [
+      'abc',
+      '1234',
+      '12345_',
+      '_12345',
+      '12345_678',
+      '1'.repeat(31),
+    ]) {
+      expect(metaPostId.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('accepts Graph paging cursors and rejects anything that could change the URL', () => {
+    expect(graphCursor.safeParse('QVFIUjRtc2Y0d0Rk=').success).toBe(true);
+    expect(graphCursor.safeParse('a-b_c').success).toBe(true);
+    for (const bad of [
+      '',
+      'has space',
+      'a/b',
+      'a&limit=1',
+      'a?b',
+      'x'.repeat(513),
+    ]) {
+      expect(graphCursor.safeParse(bad).success).toBe(false);
+    }
   });
 
   it('enforces reply and case-insensitive uniqueness limits', () => {

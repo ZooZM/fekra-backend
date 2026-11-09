@@ -43,3 +43,10 @@ export const readLocation = (v: unknown) =>
   v == null ? null : reader('location', S.LocationSchema.nullable(), null)(v);
 export const readWorkHours = (v: unknown) =>
   v == null ? null : reader('workHours', S.WorkHoursSchema.nullable(), null)(v);
+
+/** `ClientActivity.details`: null for actions that carry none, and for stored JSON that doesn't match. */
+export const readReplyRunDetails = reader(
+  'activity details',
+  S.ReplyRunActivityDetailsSchema.nullable(),
+  null,
+);
