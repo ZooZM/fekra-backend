@@ -56,7 +56,7 @@ reload_caddy() {
     if dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile; then return 0; fi
     sleep 2 # a Caddy that has only just started may not accept the reload yet
   done
-  echo "Caddy rejected the new Caddyfile; the previous config is still being served." >&2
+  echo "Could not reload Caddy (see the error above); the previous config is still being served." >&2
   CADDY_RELOAD_FAILED=1
 }
 
@@ -85,7 +85,8 @@ case "$SERVICE" in
     echo "Applying database migrations"
     API_IMAGE_OVERRIDE="$IMAGE" dc run --rm migrate
     API_IMAGE_OVERRIDE="$IMAGE" dc up -d api caddy
-    reload_caddy
+    # with the new image: on the first deploy there is no RELEASE_api for compose to fall back on
+    API_IMAGE_OVERRIDE="$IMAGE" reload_caddy
     if wait_healthy "https://$DOMAIN/api/health"; then
       echo "$IMAGE" > "$(release_file api)"
       echo "api deployed: $IMAGE"
@@ -99,7 +100,7 @@ case "$SERVICE" in
     [ -n "$(current api)" ] || { echo "Deploy the api first: no RELEASE_api yet." >&2; exit 1; }
     DASHBOARD_IMAGE_OVERRIDE="$IMAGE" dc pull dashboard
     DASHBOARD_IMAGE_OVERRIDE="$IMAGE" dc up -d dashboard caddy
-    reload_caddy
+    DASHBOARD_IMAGE_OVERRIDE="$IMAGE" reload_caddy
     if wait_healthy "https://$DOMAIN/"; then
       echo "$IMAGE" > "$(release_file dashboard)"
       echo "dashboard deployed: $IMAGE"
