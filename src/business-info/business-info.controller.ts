@@ -10,10 +10,14 @@ import {
 } from '@nestjs/common';
 import { BusinessInfoService } from './business-info.service';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
+import { RolesGuard } from '@app/auth/guards/roles.guard';
+import { Roles } from '@app/auth/decorators/roles.decorator';
 import { CreateBusinessInfoDto } from './schemas/business-info.schema';
 
+// ADMIN only until CLIENT users are scoped to their own clientId (constitution IV)
 @Controller('business-info')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class BusinessInfoController {
   constructor(private readonly businessInfoService: BusinessInfoService) {}
 

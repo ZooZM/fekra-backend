@@ -17,6 +17,9 @@ import { AuthService, LoginResult } from './auth.service';
 import { SessionService } from './session.service';
 import { LocalGuard } from './guards/local.guard';
 import { OriginGuard } from './guards/origin.guard';
+import { JwtAuthGuard } from './guards/jwt.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { Roles } from './decorators/roles.decorator';
 import { RegisterUserDto } from './schemas/auth.schema';
 import { MAX_COOKIE_AGE_MS, SESSION_COOKIE } from './consts/session.constants';
 
@@ -29,7 +32,10 @@ export class AuthController {
     private readonly config: ConfigService,
   ) {}
 
+  /** ADMIN only: the API is public, so open sign-up would hand anyone an account. */
   @Post('register')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiCreatedResponse({ type: AuthSessionDto })
   register(@Body() dto: RegisterUserDto) {
     return this.authService.registerUser(dto);

@@ -2,6 +2,9 @@ import { UnauthorizedException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { LocalGuard } from './guards/local.guard';
 import { OriginGuard } from './guards/origin.guard';
+import { JwtAuthGuard } from './guards/jwt.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { ROLES_KEY } from './decorators/roles.decorator';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -80,6 +83,15 @@ describe('AuthController', () => {
     expect(guards('login')).toContain(LocalGuard);
     expect(guards('refresh')).toContain(OriginGuard);
     expect(guards('logout')).toContain(OriginGuard);
+  });
+
+  it('only lets an ADMIN register an account', () => {
+    const handler = AuthController.prototype.register;
+    expect(Reflect.getMetadata('__guards__', handler)).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['ADMIN']);
   });
 
   it('login without limits sets a cookie of at most 400 days and reports no idle limit', () => {

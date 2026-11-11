@@ -45,6 +45,23 @@ describe('Admin-only access (e2e)', () => {
     ['post', '/users/admin', { name: 'X' }],
     ['put', `/users/admin/${id}`, { name: 'X' }],
     ['delete', `/users/admin/${id}`],
+    // no public sign-up: accounts are created by an admin
+    ['post', '/auth/register', { name: 'X' }],
+    // ADMIN only until CLIENT users are scoped to their own clientId
+    ['get', '/services'],
+    ['post', '/services', { name: 'X' }],
+    ['get', `/services/${id}`],
+    ['put', `/services/${id}`, { name: 'X' }],
+    ['delete', `/services/${id}`],
+    ['get', '/offers'],
+    ['post', '/offers', { title: 'X' }],
+    ['get', `/offers/${id}`],
+    ['patch', `/offers/${id}`, { title: 'X' }],
+    ['delete', `/offers/${id}`],
+    ['post', `/business-info/client/${id}`, { description: 'X' }],
+    ['get', `/business-info/client/${id}`],
+    ['put', `/business-info/client/${id}`, { description: 'X' }],
+    ['delete', `/business-info/client/${id}`],
   ];
 
   // every row needs a third entry, or Jest passes its done callback in that slot
@@ -95,6 +112,23 @@ describe('Admin-only access (e2e)', () => {
       200,
     );
     expect(res.body).toMatchObject({ data: [], meta: { total: 0, page: 1 } });
+  });
+
+  it('an ADMIN can still register an account', async () => {
+    await call(
+      'post',
+      '/auth/register',
+      {
+        name: 'New User',
+        email: 'new-user@e2e.test',
+        password: 'e2e-password-123',
+      },
+      adminToken,
+    ).expect(201);
+    const created = await prisma.user.findUnique({
+      where: { email: 'new-user@e2e.test' },
+    });
+    expect(created?.roles).toEqual(['CLIENT']);
   });
 
   it('own-account routes stay open to CLIENT users', async () => {

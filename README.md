@@ -206,6 +206,24 @@ Run the **CI** workflow on `main` once, then the API deploys by itself. After th
 dashboard repository deploys the same way. Each service's last good image is kept in
 `/opt/fekra/RELEASE_<service>`.
 
+### The first admin
+
+There is no public sign-up: `POST /auth/register` and `POST /users/admin` need an ADMIN. Create
+the first one on the VM, with PostgreSQL in the compose stack (the password is hashed inside the
+API container, with the same bcrypt settings the API uses):
+
+```bash
+read -rp 'Admin email: ' EMAIL; read -rsp 'Password (8-72 chars): ' PASSWORD; echo
+HASH=$(sudo docker exec -e P="$PASSWORD" fekra-api-1 node -e "require('bcrypt').hash(process.env.P, 12).then(console.log)")
+sudo docker exec -i fekra-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<SQL
+INSERT INTO users (id, name, email, password_hash, roles, updated_at)
+VALUES (gen_random_uuid(), 'Admin', lower('$EMAIL'), '$HASH', ARRAY['ADMIN']::"UserRole"[], now());
+SQL
+unset PASSWORD HASH
+```
+
+It prints `INSERT 0 1`. Sign in on the dashboard, then create the other accounts from there.
+
 ### Rollback
 
 A failed deploy rolls itself back: if `GET /api/health` is not OK within 60 seconds, the

@@ -13,9 +13,13 @@ import { OffersService } from './offers.service';
 import { CreateOfferDto, UpdateOfferDto } from './schemas/offer.schema';
 import { QueryOfferDto } from './schemas/query-offer.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
+import { RolesGuard } from '@app/auth/guards/roles.guard';
+import { Roles } from '@app/auth/decorators/roles.decorator';
 
+// ADMIN only until CLIENT users are scoped to their own clientId (constitution IV)
 @Controller('offers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class OffersController {
   constructor(private readonly offersService: OffersService) {}
 
