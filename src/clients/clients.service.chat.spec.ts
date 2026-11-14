@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -7,7 +6,7 @@ import { ClientsService } from './clients.service';
 
 const actor = { id: 'a1', name: 'Admin', email: 'admin@example.com' };
 
-describe('ClientsService chat service rules (feature 003)', () => {
+describe('ClientsService chat service rules (features 003 and 004)', () => {
   let service: ClientsService;
   let repo: Record<string, jest.Mock>;
 
@@ -27,14 +26,12 @@ describe('ClientsService chat service rules (feature 003)', () => {
         'findById',
         'update',
         'findMetaAccountConflict',
-        'findChatEndpointConflict',
         'findChatRoute',
         'findChatRouteById',
         'findWorkflowDataFresh',
       ].map((name) => [name, jest.fn()]),
     );
     repo.findMetaAccountConflict.mockResolvedValue(null);
-    repo.findChatEndpointConflict.mockResolvedValue(false);
     repo.update.mockResolvedValue({ status: 'updated', record: stored() });
     service = new ClientsService(
       {
@@ -57,36 +54,23 @@ describe('ClientsService chat service rules (feature 003)', () => {
   };
 
   describe('create', () => {
-    it('answers 409 DUPLICATE_KEY_ERROR on the endpoint field when another client has it', async () => {
-      repo.findChatEndpointConflict.mockResolvedValue(true);
-
-      const error = (await service
-        .create(
-          {
-            name: 'A',
-            businessCategory: 'B',
-            accessToken: 't',
-            chatWorkflowEndpoint: 'chat-acme',
-          },
-          actor,
-        )
-        .catch((e: unknown) => e)) as ConflictException;
-
-      expect(error).toBeInstanceOf(ConflictException);
-      expect(error.getResponse()).toMatchObject({
-        errorCode: 'DUPLICATE_KEY_ERROR',
-        details: { field: 'chatWorkflowEndpoint' },
-      });
-      expect(repo.create).not.toHaveBeenCalled();
-    });
-
-    it('does not look for a conflict when no endpoint is given', async () => {
+    it('saves an endpoint without checking other clients: several clients may share a workflow (004)', async () => {
       repo.create.mockResolvedValue({ id: 'new' });
+
       await service.create(
-        { name: 'A', businessCategory: 'B', accessToken: 't' },
+        {
+          name: 'A',
+          businessCategory: 'B',
+          accessToken: 't',
+          chatWorkflowEndpoint: 'chat-shared',
+        },
         actor,
       );
-      expect(repo.findChatEndpointConflict).not.toHaveBeenCalled();
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ chatWorkflowEndpoint: 'chat-shared' }),
+        actor,
+      );
     });
   });
 
@@ -94,7 +78,6 @@ describe('ClientsService chat service rules (feature 003)', () => {
     it('does not read the client for edits that leave the chat fields alone', async () => {
       await service.update('c1', { name: 'B', version: 4 }, actor);
       expect(repo.findById).not.toHaveBeenCalled();
-      expect(repo.findChatEndpointConflict).not.toHaveBeenCalled();
     });
 
     it('refuses to subscribe a client that has no endpoint, with a field error', async () => {
@@ -129,10 +112,6 @@ describe('ClientsService chat service rules (feature 003)', () => {
         { chatWorkflowEndpoint: 'chat-acme', chatSubscribed: true, version: 4 },
         actor,
       );
-      expect(repo.findChatEndpointConflict).toHaveBeenCalledWith(
-        'chat-acme',
-        'c1',
-      );
       expect(repo.update).toHaveBeenCalled();
     });
 
@@ -164,19 +143,21 @@ describe('ClientsService chat service rules (feature 003)', () => {
       expect(repo.update).toHaveBeenCalledTimes(2);
     });
 
-    it('answers 409 when the endpoint belongs to another client, excluding the client itself', async () => {
+    it('saves an endpoint another client already uses: workflows can be shared (004)', async () => {
       repo.findById.mockResolvedValue(stored());
-      repo.findChatEndpointConflict.mockResolvedValue(true);
 
-      await expect(
-        service.update(
-          'c1',
-          { chatWorkflowEndpoint: 'taken', version: 4 },
-          actor,
-        ),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(repo.findChatEndpointConflict).toHaveBeenCalledWith('taken', 'c1');
-      expect(repo.update).not.toHaveBeenCalled();
+      await service.update(
+        'c1',
+        { chatWorkflowEndpoint: 'chat-shared', version: 4 },
+        actor,
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        'c1',
+        { chatWorkflowEndpoint: 'chat-shared' },
+        4,
+        actor,
+      );
     });
 
     it('answers 404 when the client does not exist', async () => {

@@ -144,7 +144,7 @@ Main navigation (admin): Clients, Conversations, Comments. The client page shows
 
 | Status / `errorCode` | Where | UI |
 |---|---|---|
-| `409 DUPLICATE_KEY_ERROR`, `details.field = chatWorkflowEndpoint` | client form | on the endpoint field: "Another client already uses this endpoint" |
+| ~~`409 DUPLICATE_KEY_ERROR`, `details.field = chatWorkflowEndpoint`~~ | client form | No longer returned since feature 004 (several clients may share an endpoint). The mapping is harmless; remove it when convenient |
 | `422 INPUT_VALIDATION_ERROR` on `chatWorkflowEndpoint` | client form | the server message on the field |
 | `422 INPUT_VALIDATION_ERROR` on `offerId` / `clientId` | service form | on the field |
 | `404 NOT_FOUND` | business info `GET` | empty form + Create (not an error) |

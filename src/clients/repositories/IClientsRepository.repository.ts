@@ -57,11 +57,6 @@ export interface IClientsRepository extends Omit<
   findChatRouteById(clientId: string): Promise<ChatRoute | null>;
   /** Like getClientDataForWorkFlow, but database first (cache only as an outage fallback). */
   findWorkflowDataFresh(accountId: string): Promise<ClientWorkflowData | null>;
-  /** true when another client already uses this endpoint. */
-  findChatEndpointConflict(
-    endpoint: string,
-    excludeId?: string,
-  ): Promise<boolean>;
   getAccessToken(clientId: string): Promise<string | null>;
   /**
    * Records a reply run starting or stopping. No client row changes, so this is one insert and

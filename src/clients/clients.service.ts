@@ -36,7 +36,6 @@ export class ClientsService {
     actor: ClientActor,
   ): Promise<ClientRecord> {
     await this.assertAccountsFree(input);
-    await this.assertEndpointFree(input.chatWorkflowEndpoint);
     const { accessToken, ...rest } = input;
     const id = randomUUID(); // generated first: it's the AAD for the encryption
     return this.repo.create(
@@ -140,24 +139,10 @@ export class ClientsService {
     return stored ? this.crypto.decrypt(stored, clientId) : null;
   }
 
-  /** An endpoint belongs to one client only: its workflow is built for that client. */
-  private async assertEndpointFree(
-    endpoint: string | null | undefined,
-    excludeId?: string,
-  ): Promise<void> {
-    if (!endpoint) return;
-    if (await this.repo.findChatEndpointConflict(endpoint, excludeId)) {
-      throw new ConflictException({
-        message: 'Endpoint already used by another client',
-        errorCode: 'DUPLICATE_KEY_ERROR',
-        details: { field: 'chatWorkflowEndpoint' },
-      });
-    }
-  }
-
   /**
    * An edit may send only one of the two chat fields, so the rule "subscribed needs an endpoint"
-   * is checked on the merged state. The version check in the repository protects this
+   * is checked on the merged state. Several clients may use the same endpoint: a workflow can be
+   * shared, and tells its clients apart by the client id in each request (feature 004). The version check in the repository protects this
    * read-merge-write: a concurrent edit changes the version and the save is refused.
    */
   private async assertChatService(
@@ -194,7 +179,6 @@ export class ClientsService {
         },
       });
     }
-    await this.assertEndpointFree(data.chatWorkflowEndpoint, id);
   }
 
   /** A Facebook page / Instagram account can belong to one client only (webhooks match on it). */

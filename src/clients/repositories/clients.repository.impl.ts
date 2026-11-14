@@ -274,20 +274,6 @@ export class ClientsRepository implements IClientsRepository {
     return row ? toWorkflowData(row) : null;
   }
 
-  async findChatEndpointConflict(
-    endpoint: string,
-    excludeId?: string,
-  ): Promise<boolean> {
-    const hit = await this.prisma.client.findFirst({
-      where: {
-        chatWorkflowEndpoint: endpoint,
-        ...(excludeId && { id: { not: excludeId } }),
-      },
-      select: { id: true },
-    });
-    return hit !== null;
-  }
-
   private toChatRoute(row: Client): ChatRoute {
     return {
       clientId: row.id,

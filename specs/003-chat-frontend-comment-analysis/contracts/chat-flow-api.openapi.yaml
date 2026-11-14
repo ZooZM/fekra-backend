@@ -57,7 +57,6 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ClientRecord' }
-        '409': { $ref: '#/components/responses/EndpointTaken' }
         '422': { $ref: '#/components/responses/ChatServiceInvalid' }
   /clients/{id}:
     patch:
@@ -78,7 +77,7 @@ paths:
               schema: { $ref: '#/components/schemas/ClientRecord' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: '`DUPLICATE_KEY_ERROR` (`details.field = "chatWorkflowEndpoint"`) or `CLIENT_VERSION_CONFLICT` (as in 001).'
+          description: '`DUPLICATE_KEY_ERROR` for an account id or `CLIENT_VERSION_CONFLICT` (as in 001). Never for `chatWorkflowEndpoint`: several clients may share one (feature 004).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorBody' }
@@ -427,9 +426,6 @@ components:
     ValidationFailed:
       description: '`INPUT_VALIDATION_ERROR` with `details.formErrors` and `details.fieldErrors`.'
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
-    EndpointTaken:
-      description: '`DUPLICATE_KEY_ERROR`, `details.field = "chatWorkflowEndpoint"` (FR-034).'
-      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
     ChatServiceInvalid:
       description: |
         `INPUT_VALIDATION_ERROR`. `details.fieldErrors.chatWorkflowEndpoint` when the endpoint
@@ -467,7 +463,7 @@ components:
           minLength: 1
           maxLength: 100
           pattern: '^[A-Za-z0-9_-]{1,100}$'
-          description: One path segment, added to the fixed base address. Unique across clients.
+          description: One path segment, added to the fixed base address. Several clients may share one (feature 004).
         chatSubscribed:
           type: boolean
           description: Requires an endpoint. Only subscribed clients have private messages handed to their workflow.

@@ -58,7 +58,8 @@ Terms: the spec's "assistant" is the n8n chat workflow for private messages (DMs
 ## R3. The endpoint, the base address and the request URL
 
 - **Decision**:
-  - Columns on `clients`: `chat_workflow_endpoint VARCHAR(100) NULL UNIQUE` and
+  - Columns on `clients`: `chat_workflow_endpoint VARCHAR(100) NULL` (indexed; unique until
+    feature 004 allowed shared workflows) and
     `chat_subscribed BOOLEAN NOT NULL DEFAULT false`.
   - Format (Zod, `z.string().regex(/^[A-Za-z0-9_-]{1,100}$/)`): one path segment. No slash, dot,
     space, `@`, `?`, `#` or `%`, so no host change, traversal or query is possible (FR-035).
@@ -83,25 +84,26 @@ Terms: the spec's "assistant" is the n8n chat workflow for private messages (DMs
   at `N8N_WEBHOOK_URL`, so the team creates or renames one workflow per client. Rollback keeps
   `N8N_WEBHOOK_URL` in the env file (R12).
 
-## R4. Rules that need the stored state: subscribe needs an endpoint, endpoints are unique
+## R4. Rules that need the stored state: subscribe needs an endpoint (endpoints may be shared)
 
 - **Decision**: `ClientsService` enforces both.
   - `chatSubscribed: true` without an endpoint, and clearing the endpoint of a subscribed client,
     answer `422 INPUT_VALIDATION_ERROR` with `details.fieldErrors.chatWorkflowEndpoint`, the same
     shape the dashboard already maps to form fields (FR-045). On create, a Zod `superRefine` does
     it. On update, the service merges the request over the current record and checks the result.
-  - Uniqueness uses the same pattern as `assertAccountsFree`: a pre-check
-    (`findChatEndpointConflict`) answering `409 DUPLICATE_KEY_ERROR` with `details.field =
-    "chatWorkflowEndpoint"`, with the unique index as the final guard (the global filter already
-    maps `P2002` to the same code).
+  - *(Changed by feature 004.)* Endpoints are **not** unique: several clients may share one
+    workflow (business decision). The pre-check (`findChatEndpointConflict`), its `409
+    DUPLICATE_KEY_ERROR` and the unique index were removed; a plain index stays. The format rule
+    and `buildWorkflowUrl` (R3) are the SSRF guard, not the uniqueness, and are unchanged. There is
+    still no shared fallback address: an endpoint and the subscription are still required.
   - The existing version check (compare-and-swap in `ClientsRepository.update`) protects the
     read-merge-write: a concurrent edit changes `version`, so the save is refused with
     `CLIENT_VERSION_CONFLICT` and the merged check is never trusted on stale data.
   - Both fields go through the existing `changedFields` activity entry (names only, never values),
     which satisfies FR-036 and FR-046 with no new code.
 - **Rationale**: The cross-field rule depends on stored data, so Zod alone cannot do it for a
-  partial update. Reusing the 422 and 409 shapes keeps the dashboard code the same as for FR-012
-  and FR-013 of feature 001.
+  partial update. Reusing the 422 shape keeps the dashboard code the same as for FR-013 of
+  feature 001.
 - **Alternatives considered**: A database `CHECK (NOT chat_subscribed OR chat_workflow_endpoint IS
   NOT NULL)` as an extra guard. Adopted: it is in the migration, as a last line of defense.
   Rejected as the only guard: a `CHECK` violation gives a generic error without a field.

@@ -18,7 +18,8 @@ the pipeline (subscription and pause), and a few fixes that would otherwise bloc
 This repository supplies:
 
 - **Per-client chat workflow** (US5):
-  - `clients` gets `chatWorkflowEndpoint` (unique path segment) and `chatSubscribed` (R3, R4).
+  - `clients` gets `chatWorkflowEndpoint` (a path segment; several clients may share one since
+    feature 004) and `chatSubscribed` (R3, R4).
   - `N8N_BASE_URL` replaces `N8N_WEBHOOK_URL`, and every delivery attempt resolves
     `{base}/{endpoint}` fresh. The URL is host-pinned (R3).
   - Only subscribed clients' DMs are stored, buffered or delivered (R2). The release is a hard
@@ -67,7 +68,7 @@ separate repository).
 - **PostgreSQL**: one additive migration.
   - New columns: `clients` (2), `chats` (4), `message_replies` (1), `comment_replies` (2).
   - New tables: `chat_pause_events`, `comment_export_records`.
-  - Two new enums, eight new indexes (including the unique endpoint index), one `CHECK`
+  - Two new enums, eight new indexes (including the endpoint index, unique in 003, plain since 004), one `CHECK`
     constraint.
   - Rows older than `RETENTION_MONTHS` are deleted daily (R15).
 - **Redis**: no new keys. `n8n:pending` and `n8n:dead` gain two dead-letter reasons
@@ -156,11 +157,11 @@ specs/003-chat-frontend-comment-analysis/
 ```text
 src/
 ├── clients/
-│   ├── clients.service.ts (+ .spec.ts)          # + findChatRoute(accountId), findChatRouteById(id); endpoint free + subscribe-needs-endpoint rules
+│   ├── clients.service.ts (+ .spec.ts)          # + findChatRoute(accountId), findChatRouteById(id); subscribe-needs-endpoint rule (endpoint uniqueness removed by 004)
 │   ├── schemas/client.schema.ts (+ .spec.ts)    # + chatWorkflowEndpoint (regex), chatSubscribed; create superRefine
 │   ├── schemas/client-record.schema.ts          # + both fields in the response DTO
 │   ├── schemas/query-client.schema.ts           # + chatSubscribed filter
-│   ├── repositories/IClientsRepository.repository.ts  # + findChatRoute*, findChatEndpointConflict, findWorkflowDataFresh
+│   ├── repositories/IClientsRepository.repository.ts  # + findChatRoute*, findWorkflowDataFresh (findChatEndpointConflict removed by 004)
 │   ├── repositories/clients.repository.impl.ts  # + the above (uncached), list filter
 │   └── types/client.types.ts                    # + ChatRoute
 ├── inbox/

@@ -30,6 +30,15 @@ all of the client's information are entered.)*
 - Q: How does an administrator find one customer's conversation? → A: A search box for the
   customer identifier, with an exact match, combined with the other filters. Searching inside
   message text is not part of this version (FR-002).
+
+### Change from feature 004 (2026-11-14)
+
+- Q: Can several clients use the same chat workflow endpoint? → A: Yes (business decision): clients
+  of the same kind share one workflow, which tells them apart by the client information and client
+  id carried by each message. FR-034 ("an endpoint belongs to at most one client") is removed. The
+  endpoint format (FR-032, FR-035) and "no shared fallback address" are unchanged: a client is still
+  handled only once it has an endpoint and is subscribed. See
+  `specs/004-n8n-lead-endpoints/spec.md`.
 - Q: Are comment downloads recorded for accountability? → A: Yes. Each download is recorded with
   who made it, when, the filters used, the number of rows and whether it completed, without the
   comment text. No screen shows these records in this version (FR-030).
@@ -273,7 +282,7 @@ only that client's information.
    path segment (for example a full web address, text with spaces, a slash, or ".."), **Then** the
    form rejects it with a message on that field and nothing is saved.
 4. **Given** an endpoint already used by another client, **When** the administrator saves it,
-   **Then** the conflict is reported on that field and nothing is saved.
+   **Then** it is saved: several clients may share one workflow (changed by feature 004).
 5. **Given** a client with an endpoint, **When** the administrator changes it and saves, **Then**
    private messages handled after the save go to the new endpoint, and the change is recorded
    like any other edit of the client.
@@ -389,7 +398,8 @@ of them are shown on the client's page and that the client's chat workflow reque
 - The workflow at a client's endpoint does not exist or is down: the message is handled like any
   workflow failure today (resent a limited number of times, then kept for operators). The
   dashboard does not check that the workflow exists when the endpoint is saved.
-- A client is deleted: its endpoint becomes free for another client.
+- Several clients use the same endpoint: each message still carries only its own client's
+  information and client id, so the shared workflow can tell them apart (feature 004).
 - A subscribed client is unsubscribed while its messages are waiting for a workflow's answer: no
   delivery attempt is made after the save, and the message is kept for operators like any other
   message that could not be delivered.
@@ -530,10 +540,10 @@ of them are shown on the client's page and that the client's chat workflow reque
   that an administrator enters in the client's form. It is up to 100 characters, made of letters,
   digits, hyphens and underscores only.
 - **FR-033**: A subscribed client's private messages MUST be handed to the workflow at the base
-  address followed by that client's endpoint, and to no other client's workflow. Each message MUST carry
-  only its own client's information.
-- **FR-034**: An endpoint MUST belong to at most one client. A conflict MUST be reported on that
-  field, and nothing MUST be saved.
+  address followed by that client's endpoint, and to no other workflow. Each message MUST carry
+  only its own client's information, including its client id (a workflow may be shared, FR-034).
+- **FR-034**: *(Changed by feature 004.)* The same endpoint MAY be set on several clients, which
+  then share one workflow. Saving it is never reported as a conflict.
 - **FR-035**: An endpoint that is anything other than a plain path segment (a full web address, a
   host name, a slash, "..", spaces, a query) MUST be rejected with a message on the field. No
   stored value can change the host that the platform sends private messages to.
@@ -626,7 +636,7 @@ of them are shown on the client's page and that the client's chat workflow reque
   rows, and whether it completed. It never holds comment text.
 - **Chat Workflow Endpoint**: A short path stored on a client. Added to the fixed base address, it
   gives the workflow that handles that client's private messages. A client has at most one, and
-  no two clients share one. A client is either subscribed to the chat service or not, and only a
+  several clients may share the same one (feature 004). A client is either subscribed to the chat service or not, and only a
   subscribed client's private messages are handed to its workflow.
 - **Business Information**: One optional record per client with contact details, social media
   links, location, work hours, payment methods and installment options.
@@ -736,8 +746,8 @@ of them are shown on the client's page and that the client's chat workflow reque
   configuration. The dashboard never shows or changes them.
 - The per-client chat workflow applies to private-message conversations only. Comments are still
   handled inside the platform and are not sent to any workflow.
-- Each endpoint belongs to at most one client, so a workflow built for one client is not shared by
-  another. The dashboard does not check that a workflow exists at an endpoint when it is saved.
+- Several clients may share one endpoint, and so one workflow (feature 004). The shared workflow
+  tells them apart by the client information and client id in each message. The dashboard does not check that a workflow exists at an endpoint when it is saved.
 - Decided for this version: changes to services, offers and business information are not added
   to the administrator activity record.
 - There is no shared fallback workflow address. A client is handled by the chat workflow only

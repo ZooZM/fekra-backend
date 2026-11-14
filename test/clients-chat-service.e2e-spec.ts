@@ -156,16 +156,19 @@ describe('Clients: chat workflow endpoint and subscription (e2e)', () => {
   });
 
   describe('the endpoint', () => {
-    it('is unique across clients: 409 DUPLICATE_KEY_ERROR on the field', async () => {
-      await newClient('First owner', { chatWorkflowEndpoint: 'chat-shared' });
+    it('can be shared by several clients: one workflow for many (feature 004)', async () => {
+      const first = await newClient('First user', {
+        chatWorkflowEndpoint: 'chat-shared',
+      });
       const second = await newClient('Second');
 
       const res = await patch(second, {
         chatWorkflowEndpoint: 'chat-shared',
-      }).expect(409);
+        chatSubscribed: true,
+      }).expect(200);
       expect(res.body).toMatchObject({
-        errorCode: 'DUPLICATE_KEY_ERROR',
-        details: { field: 'chatWorkflowEndpoint' },
+        chatWorkflowEndpoint: 'chat-shared',
+        chatSubscribed: true,
       });
 
       const create = await admin()
@@ -176,13 +179,19 @@ describe('Clients: chat workflow endpoint and subscription (e2e)', () => {
           accessToken: 't',
           chatWorkflowEndpoint: 'chat-shared',
         })
-        .expect(409);
-      expect((create.body as ClientBody).details?.field).toBe(
-        'chatWorkflowEndpoint',
+        .expect(201);
+      expect((create.body as ClientBody).chatWorkflowEndpoint).toBe(
+        'chat-shared',
+      );
+
+      // the first client keeps it
+      const firstNow = await admin().get(`/clients/${first.id}`).expect(200);
+      expect((firstNow.body as ClientBody).chatWorkflowEndpoint).toBe(
+        'chat-shared',
       );
     });
 
-    it('can be saved again unchanged by its own client, and freed when the client is deleted', async () => {
+    it('can be saved again unchanged by its own client, and used by another after a delete', async () => {
       const client = await newClient('Reuse', {
         chatWorkflowEndpoint: 'chat-reuse',
       });

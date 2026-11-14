@@ -13,7 +13,7 @@ the DM path only as a fallback when the database read fails (research R1, R16).
 
 | Field | Column | Type | Rules |
 |---|---|---|---|
-| `chatWorkflowEndpoint` | `chat_workflow_endpoint` | `VARCHAR(100) NULL UNIQUE` | `^[A-Za-z0-9_-]{1,100}$`. One path segment. Unique across clients (FR-032, FR-034, FR-035). `null` = none |
+| `chatWorkflowEndpoint` | `chat_workflow_endpoint` | `VARCHAR(100) NULL`, indexed | `^[A-Za-z0-9_-]{1,100}$`. One path segment (FR-032, FR-035). Several clients may share one (FR-034, changed by feature 004). `null` = none |
 | `chatSubscribed` | `chat_subscribed` | `BOOLEAN NOT NULL DEFAULT false` | `true` only with an endpoint (FR-043, FR-045). Existing and new clients start `false` (FR-047) |
 
 - **Database guard**: `CHECK (NOT chat_subscribed OR chat_workflow_endpoint IS NOT NULL)`
@@ -174,7 +174,8 @@ One migration, all additive and safe for the running release (constitution VI):
 
 1. `CREATE TYPE "ChatPauseAction"` and `"CommentDecisionBasis"`.
 2. `ALTER TABLE clients ADD chat_workflow_endpoint VARCHAR(100), ADD chat_subscribed BOOLEAN NOT
-   NULL DEFAULT false`, unique index on the endpoint, the `CHECK` constraint.
+   NULL DEFAULT false`, unique index on the endpoint, the `CHECK` constraint. Feature 004's
+   `shared_chat_workflow_endpoint` migration replaces the unique index with a plain one.
 3. `ALTER TABLE chats ADD paused_at, paused_until, paused_by_id, paused_by_name` (all nullable),
    indexes on `updated_at` and `paused_until`.
 4. `ALTER TABLE message_replies ADD answered BOOLEAN NOT NULL DEFAULT true`, index on

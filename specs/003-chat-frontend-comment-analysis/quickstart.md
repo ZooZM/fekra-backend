@@ -45,7 +45,7 @@ in the `Clients`, `Conversations`, `Comments`, `Services`, `Offers` and `Busines
 |---|---|---|---|
 | 1 | `PATCH /clients/{{clientId}}` `{ "chatSubscribed": true, "version": n }` on a client with no endpoint | 422, `fieldErrors.chatWorkflowEndpoint` | US5-8, FR-045 |
 | 2 | same with `"chatWorkflowEndpoint": "chat-acme"` | 200, both fields set, `version` + 1 | US5-1, FR-032 |
-| 3 | another client, same endpoint | 409 `DUPLICATE_KEY_ERROR`, `details.field = chatWorkflowEndpoint` | US5-4, FR-034 |
+| 3 | another client, same endpoint | 200: both clients keep it (shared workflow, feature 004) | US5-4, FR-034 |
 | 4 | endpoint `https://evil.test/x`, `a/b`, `..`, `a b` | 422 each | US5-3, FR-035, SC-016 |
 | 5 | send a DM to the test page (or the dev simulator) | the stub/n8n receives `POST {base}chat-acme` with the client's data | US5-1, SC-015 |
 | 6 | unsubscribe, send a DM | nothing reaches n8n, no conversation row, a `warn` "dropped" log without text | US5-7, FR-044, SC-018 |

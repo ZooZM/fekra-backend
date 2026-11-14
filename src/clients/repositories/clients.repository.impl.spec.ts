@@ -165,28 +165,6 @@ describe('ClientsRepository chat reads (feature 003)', () => {
     });
   });
 
-  describe('findChatEndpointConflict', () => {
-    it('is true when another client has the endpoint', async () => {
-      prisma.client.findFirst.mockResolvedValue({ id: 'c2' });
-      await expect(
-        repo.findChatEndpointConflict('chat-acme', 'c1'),
-      ).resolves.toBe(true);
-      expect(prisma.client.findFirst).toHaveBeenCalledWith({
-        where: { chatWorkflowEndpoint: 'chat-acme', id: { not: 'c1' } },
-        select: { id: true },
-      });
-    });
-
-    it('is false when nobody else has it, and does not exclude anyone on create', async () => {
-      prisma.client.findFirst.mockResolvedValue(null);
-      await expect(repo.findChatEndpointConflict('free')).resolves.toBe(false);
-      expect(prisma.client.findFirst).toHaveBeenCalledWith({
-        where: { chatWorkflowEndpoint: 'free' },
-        select: { id: true },
-      });
-    });
-  });
-
   describe('findAll chatSubscribed filter', () => {
     it('adds the filter to the page and to the total', async () => {
       await repo.findAll({

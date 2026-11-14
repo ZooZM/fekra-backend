@@ -73,10 +73,11 @@ model Client {
 
   brandLogo String? @map("brand_logo") @db.VarChar(255)
 
-  // The client's own n8n chat workflow: one path segment added to N8N_BASE_URL (unique, validated
-  // in NestJS). Only a subscribed client's DMs are stored and delivered; subscribing needs an
-  // endpoint (also guarded by a CHECK constraint in the migration).
-  chatWorkflowEndpoint String? @unique @map("chat_workflow_endpoint") @db.VarChar(100)
+  // The client's n8n chat workflow: one path segment added to N8N_BASE_URL (validated in NestJS).
+  // Several clients may share one workflow (feature 004), so it is not unique. Only a subscribed
+  // client's DMs are stored and delivered; subscribing needs an endpoint (also guarded by a CHECK
+  // constraint in the migration).
+  chatWorkflowEndpoint String? @map("chat_workflow_endpoint") @db.VarChar(100)
   chatSubscribed       Boolean @default(false) @map("chat_subscribed")
 
   // AI config (validate in NestJS: brandVoice max 400 chars,
@@ -108,6 +109,7 @@ model Client {
   chats          Chat[]
   commentReplies CommentReply[]
 
+  @@index([chatWorkflowEndpoint])
   @@map("clients")
 }
 
