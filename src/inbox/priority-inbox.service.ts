@@ -384,7 +384,12 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           await this.recordPausedBatch(client.id, item);
           return;
         }
-        await this.delivery.send(item.id, { ...item, client });
+        // clientId travels with the request: the reply is recorded and the pause is re-checked with it
+        await this.delivery.send(item.id, {
+          ...item,
+          clientId: client.id,
+          client,
+        });
         break;
       }
     }

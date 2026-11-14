@@ -25,8 +25,12 @@ export class MessageSenderService {
   /** Never throws, so callers can use `void sender.reply(...)`. */
   async reply(req: SendableRequest, text: string): Promise<void> {
     let messages: NonNullable<SendableRequest['messages']>;
+    // The client of the request, not req.clientId: a request that was pending in Redis when this
+    // release started was written without that field, and its client is always there.
+    let clientId = req.clientId ?? req.client?.id;
     try {
       if (!req.client) throw new GraphError('client is missing', false);
+      clientId = req.client.id;
       const token = await this.clients.getAccessToken(req.client.id);
       if (!token)
         throw new GraphError('No access token stored for this client', false);
@@ -38,7 +42,7 @@ export class MessageSenderService {
 
       // Checkpoint 4 (research R2): the workflow can take a while, so an administrator may have
       // paused the conversation after the message was handed over. Nothing is sent then.
-      const pausedChat = await this.findPausedChat(req);
+      const pausedChat = await this.findPausedChat(req, clientId);
       if (pausedChat) {
         await this.recordUnanswered(pausedChat.id, messages);
         return;
@@ -71,7 +75,7 @@ export class MessageSenderService {
 
     try {
       const chat = await this.conversations.findOrCreate({
-        clientId: req.clientId,
+        clientId,
         platform: req.platform,
         senderId: req.senderId,
         receiverId: req.accountId,
@@ -92,10 +96,13 @@ export class MessageSenderService {
   }
 
   /** The conversation when it is paused now. Fails open: if it cannot be read, the reply is sent. */
-  private async findPausedChat(req: SendableRequest): Promise<Chat | null> {
+  private async findPausedChat(
+    req: SendableRequest,
+    clientId: string,
+  ): Promise<Chat | null> {
     try {
       const chat = await this.conversations.findOrCreate({
-        clientId: req.clientId,
+        clientId,
         platform: req.platform,
         senderId: req.senderId as string,
         receiverId: req.accountId,

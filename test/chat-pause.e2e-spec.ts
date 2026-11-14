@@ -352,6 +352,31 @@ describe('Pausing the assistant in a conversation (e2e)', () => {
     ).toBe(1);
   });
 
+  it('sends the reply of a conversation that is not paused and records it as answered', async () => {
+    const chat = await startChat('cust-answered');
+    const requestId = (
+      n8nCalls()[n8nCalls().length - 1].body as { requestId: string }
+    ).requestId;
+
+    await request(app.getHttpServer())
+      .post('/n8n/callback')
+      .set('x-webhook-secret', process.env.N8N_WEBHOOK_SECRET as string)
+      .send({ id: requestId, text: 'the reply of the workflow' })
+      .expect(200);
+
+    const rows = await waitFor(
+      () =>
+        prisma.messageReply.findMany({
+          where: { chatId: chat.id, answered: true },
+        }),
+      (list) => list.length >= 1,
+    );
+    expect(rows[0].reply).toBe('the reply of the workflow');
+    expect(
+      graphCalls().filter((url) => url.pathname.endsWith('/messages')),
+    ).toHaveLength(1);
+  });
+
   it('does not send a reply that arrives after the conversation was paused', async () => {
     const chat = await startChat('cust-callback');
     const requestId = (

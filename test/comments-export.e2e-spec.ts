@@ -18,6 +18,7 @@ import {
   waitFor,
 } from './utils/chat-e2e';
 import { restoreGraph, stubGraph } from './utils/graph-stub';
+import { layerFetch } from './utils/fetch-layer';
 
 // the dispatch loop is shortened for this file only (the pipeline test at the end uses it)
 fastPipeline();
@@ -246,7 +247,7 @@ describe('Comments CSV export (e2e)', () => {
   }, 180_000);
 
   describe('how the label was decided, through the real pipeline (SC-005, SC-007)', () => {
-    let gemini: jest.SpyInstance;
+    let removeGemini: () => void;
 
     beforeAll(async () => {
       await createChatClient(app, {
@@ -257,30 +258,16 @@ describe('Comments CSV export (e2e)', () => {
     });
     beforeEach(() => {
       // the AI model is unavailable: every call to Gemini fails
-      const real = global.fetch.bind(globalThis);
-      gemini = jest
-        .spyOn(global, 'fetch')
-        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-          const url = new URL(
-            typeof input === 'string'
-              ? input
-              : input instanceof URL
-                ? input.toString()
-                : input.url,
-          );
-          return url.hostname.includes('generativelanguage')
-            ? Promise.resolve(
-                new Response('{"error":{"message":"unavailable"}}', {
-                  status: 503,
-                }),
-              )
-            : real(input, init);
-        });
+      removeGemini = layerFetch((url) =>
+        url.hostname.includes('generativelanguage')
+          ? new Response('{"error":{"message":"unavailable"}}', { status: 503 })
+          : undefined,
+      );
       stubGraph(() => ({ status: 200, body: { id: 'graph-1' } }));
     });
     afterEach(() => {
-      restoreGraph(); // in reverse order: the Graph stub wraps the Gemini one
-      gemini.mockRestore();
+      restoreGraph();
+      removeGemini();
     });
 
     it('records RULES for a keyword comment and SAFE_FALLBACK for an ambiguous one when the model fails', async () => {

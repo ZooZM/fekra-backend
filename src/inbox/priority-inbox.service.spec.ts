@@ -500,6 +500,8 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
         'dm-1',
         expect.objectContaining({
           id: 'dm-1',
+          // the reply is recorded and the pause is re-checked with this id when n8n answers
+          clientId: 'client-1',
           client: expect.objectContaining({
             services: [{ name: 'Cut', price: '120' }],
           }),

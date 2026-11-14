@@ -245,12 +245,20 @@ export class ConversationsRepository implements IConversationsRepository {
 
   releaseExpiredPauses(now: Date): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
-      // UPDATE ... RETURNING claims each row once, so two instances never record the same expiry
+      // RETURNING gives the row as it is after the update, where paused_until is already NULL, so
+      // the expiry time is read first, in a CTE that locks the rows. SKIP LOCKED makes two instances
+      // claim different rows: each expiry is recorded once.
       const released = await tx.$queryRaw<{ id: string; paused_until: Date }[]>`
-        UPDATE chats
+        WITH due AS (
+          SELECT id, paused_until FROM chats
+          WHERE paused_until IS NOT NULL AND paused_until <= ${now}
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE chats c
         SET paused_at = NULL, paused_until = NULL, paused_by_id = NULL, paused_by_name = NULL
-        WHERE paused_until IS NOT NULL AND paused_until <= ${now}
-        RETURNING id, paused_until`;
+        FROM due
+        WHERE c.id = due.id
+        RETURNING c.id, due.paused_until`;
       if (released.length > 0) {
         await tx.chatPauseEvent.createMany({
           data: released.map((row) => ({

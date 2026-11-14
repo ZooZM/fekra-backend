@@ -34,6 +34,18 @@ describe('configureApp', () => {
     expect(app.enableCors).not.toHaveBeenCalled();
   });
 
+  it('adds no second Zod pass: AppModule already validates with AppZodValidationPipe', () => {
+    const app = makeApp({});
+    configureApp(app as never);
+
+    const pipes = app.useGlobalPipes.mock.calls[0] as {
+      constructor: { name: string };
+    }[];
+    expect(pipes.map((pipe) => pipe.constructor.name)).toEqual([
+      'ValidationPipe',
+    ]);
+  });
+
   it('enables CORS with credentials only for the listed origins', () => {
     const app = makeApp({ CORS_ORIGINS: 'https://admin.example.com' });
     configureApp(app as never);

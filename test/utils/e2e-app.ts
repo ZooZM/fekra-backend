@@ -15,7 +15,11 @@ export async function createE2eApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  const app = moduleRef.createNestApplication({ rawBody: true, logger: false });
+  // E2E_LOGS=1 shows the application log, to find out why a test fails
+  const app = moduleRef.createNestApplication({
+    rawBody: true,
+    logger: process.env.E2E_LOGS ? ['log', 'warn', 'error'] : false,
+  });
   configureApp(app);
   await app.init();
   return app;

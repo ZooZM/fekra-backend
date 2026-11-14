@@ -249,7 +249,7 @@ describe('ConversationsRepository (feature 003)', () => {
   });
 
   describe('releaseExpiredPauses', () => {
-    it('claims the expired pauses with UPDATE ... RETURNING and records an automatic RESUMED for each', async () => {
+    it('claims the expired pauses once and records an automatic RESUMED for each', async () => {
       const end1 = new Date('2026-11-14T11:00:00.000Z');
       const end2 = new Date('2026-11-14T11:30:00.000Z');
       tx.$queryRaw.mockResolvedValue([
@@ -261,7 +261,10 @@ describe('ConversationsRepository (feature 003)', () => {
 
       const sql = (tx.$queryRaw.mock.calls[0][0] as string[]).join('?');
       expect(sql).toContain('UPDATE chats');
-      expect(sql).toContain('RETURNING id, paused_until');
+      // RETURNING shows the row after the update, where paused_until is NULL: the end of the pause
+      // has to come from the rows read (and locked) before it
+      expect(sql).toContain('FOR UPDATE SKIP LOCKED');
+      expect(sql).toContain('RETURNING c.id, due.paused_until');
       expect(tx.$queryRaw.mock.calls[0][1]).toBe(NOW);
       expect(tx.chatPauseEvent.createMany).toHaveBeenCalledWith({
         data: [

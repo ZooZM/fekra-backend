@@ -72,6 +72,34 @@ describe('MessageSenderService', () => {
     });
   });
 
+  describe('a request that was pending before clientId travelled with it', () => {
+    const legacy = {
+      ...request,
+      clientId: undefined,
+    } as unknown as SendableRequest;
+
+    it('uses the id of its client to record the exchange', async () => {
+      await service.reply(legacy, 'hello');
+
+      expect(conversations.findOrCreate).toHaveBeenCalledWith({
+        clientId: 'client-1',
+        platform: 'facebook',
+        senderId: 'user-1',
+        receiverId: 'page-1',
+      });
+      expect(conversations.createMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('still honours a pause, instead of failing open on the missing id', async () => {
+      conversations.isPaused.mockReturnValue(true);
+
+      await service.reply(legacy, 'hello');
+
+      expect(graph.post).not.toHaveBeenCalled();
+      expect(conversations.createUnansweredMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('when an administrator paused the conversation (checkpoint 4)', () => {
     beforeEach(() => conversations.isPaused.mockReturnValue(true));
 

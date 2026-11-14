@@ -181,7 +181,7 @@ row 7).
   - `findAll`, `findOne` and `findMessages` delegate with `@CurrentUser`;
   - class-level `ROLES` metadata is `['ADMIN','CLIENT']` (read with `Reflector`, as in
     src/clients/clients.controller.spec.ts).
-- [ ] T016 [P] [US1] Create test/conversations.e2e-spec.ts. Setup: an ADMIN, a CLIENT user linked
+- [X] T016 [P] [US1] Create test/conversations.e2e-spec.ts. Setup: an ADMIN, a CLIENT user linked
   to client A, and clients A and B, each with chats and `message_replies` created through Prisma.
   Cases:
   - **Access**: 401 without a token.
@@ -194,7 +194,6 @@ row 7).
   - **Thread order**: `GET /chats/{id}/messages?orderDir=asc` with 50 seeded exchanges returns
     them in order with identical text (SC-002), each with `answered: true`.
   - **Empty chat**: a chat with no exchange has `lastExchange: null`.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 1
 
@@ -329,7 +328,7 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
     `createUnansweredMessage` with the batch text; nothing recorded as answered.
   - **Not paused**: unchanged.
   - **Chat read error**: send anyway, with a `warn` log (R16).
-- [ ] T037 [P] [US2] Create test/chat-pause.e2e-spec.ts (`stubN8n`, `stubGraph`). At the top of the
+- [X] T037 [P] [US2] Create test/chat-pause.e2e-spec.ts (`stubN8n`, `stubGraph`). At the top of the
   file set `DM_WINDOW_SEC='1'` and `DISPATCH_INTERVAL_MS='100'` (T002). Use a client
   with an encrypted token, and a chat created by pushing one DM.
   - **Access**: pause and resume → 401 without a token, 403 for a CLIENT user, 404 for an unknown
@@ -350,7 +349,6 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
   - **List filter**: `GET /chats?paused=true` returns only paused chats.
   - **Other conversations**: while chat A is paused, a DM from another customer of the same client
     produces exactly one n8n call (FR-015, US2-5).
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 2
 
@@ -451,7 +449,7 @@ rows with `clientName`, and `meta.total` matches. The dashboard `/comments` show
   - `findAll` maps the rows with `toCommentRecord`;
   - the ADMIN `clientId` is passed through and a CLIENT user is scoped;
   - `decisionBasis` is passed to the repository.
-- [ ] T054 [P] [US3] Create test/comment-replies.e2e-spec.ts. Seed through Prisma: clients A and B,
+- [X] T054 [P] [US3] Create test/comment-replies.e2e-spec.ts. Seed through Prisma: clients A and B,
   comments of every label, with `decisionBasis` RULES, AI_MODEL (`decisionModel` set),
   SAFE_FALLBACK and UNKNOWN. Cases:
   - **Access**: 401 without a token.
@@ -461,7 +459,6 @@ rows with `clientName`, and `meta.total` matches. The dashboard `/comments` show
   - **Range**: `to < from` → 422 `INPUT_VALIDATION_ERROR` with `details.fieldErrors.to`.
   - **Tenant**: a CLIENT user only sees their own client's comments.
   - **Empty comment**: a comment `''` comes back as `''`.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 3
 
@@ -557,7 +554,7 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
     `text/csv; charset=utf-8`, `Content-Disposition` with the filename, and `Cache-Control:
     no-store`;
   - the class-level `ROLES` stay `['ADMIN','CLIENT']`.
-- [ ] T071 [P] [US4] Create test/comments-export.e2e-spec.ts:
+- [X] T071 [P] [US4] Create test/comments-export.e2e-spec.ts:
   - **Access**: 401; CLIENT → 403; `to < from` → 422.
   - **Content**: the CSV starts with the UTF-8 BOM, then the header in contract order. An Arabic
     comment round-trips, and a comment `=HYPERLINK("x")` comes out as `'=HYPERLINK(""x"")` quoted.
@@ -572,7 +569,6 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
     unusable in e2e) → the rows have `RULES`, and `SAFE_FALLBACK` with `SPAM` (SC-005, SC-007).
     This suite sets `COMMENT_LLM_MAX_ATTEMPTS='1'` and `DISPATCH_INTERVAL_MS='100'` at the top of
     the file (T002).
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 4
 
@@ -716,7 +712,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
     - a subscribed batch uses `findWorkflowDataFresh(accountId)` (not
       `getClientDataForWorkFlow`) for the payload.
   - **Comments**: the comment branch still uses `getClientDataForWorkFlow`.
-- [ ] T089 [P] [US5] Create test/chat-workflow.e2e-spec.ts (`stubN8n`). At the top of the file set
+- [X] T089 [P] [US5] Create test/chat-workflow.e2e-spec.ts (`stubN8n`). At the top of the file set
   `DM_WINDOW_SEC='1'` and `DISPATCH_INTERVAL_MS='100'` (T002). Create clients through
   `POST /clients` as ADMIN, then `PATCH` the chat fields. Cases:
   - **Routing**: 3 subscribed clients with endpoints `chat-a`, `chat-b`, `chat-c`; 50 DMs spread
@@ -735,8 +731,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - **Unsubscribe while pending**: a DM delivered with the stub returning 500 (no ack), then the
     client is unsubscribed, then the ack TTL expires (trigger `delivery.onExpire(id)`) → the item
     is in `n8n:dead` with `UNSUBSCRIBED`, with no new call.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
-- [ ] T090 [P] [US5] Extend test/clients-admin.e2e-spec.ts:
+- [X] T090 [P] [US5] Extend test/clients-admin.e2e-spec.ts:
   - **Existing clients**: a client created before the chat fields are used has `chatSubscribed:
     false` and `chatWorkflowEndpoint: null`.
   - **Subscribe rules**: `PATCH {chatSubscribed:true}` → 422 on the field; with an endpoint →
@@ -746,7 +741,6 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
     subscribed → 422.
   - **Filter**: `GET /clients?chatSubscribed=false` lists only unsubscribed clients (SC-019).
   - **Access**: a CLIENT user → 403 on these routes.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 5
 
@@ -862,7 +856,7 @@ edit all three (quickstart §3 rows 14–16).
     src/offers/schemas/query-offer.schema.spec.ts: `clientId` is an optional UUID;
   - create src/business-info/schemas/business-info.schema.spec.ts: `UpdateBusinessInfoBodySchema`
     accepts a partial body, an optional `clientId`, `null` for nullable fields, and rejects `{}`.
-- [ ] T109 [P] [US6] Create test/client-data.e2e-spec.ts (ADMIN, CLIENT user, clients A and B):
+- [X] T109 [P] [US6] Create test/client-data.e2e-spec.ts (ADMIN, CLIENT user, clients A and B):
   - **Access**: 401 without a token and 403 for the CLIENT user on every route.
   - **Malformed ids**: `GET /services/not-a-uuid` and `GET /business-info/client/x` → 422.
   - **Business info**: `GET` for A → 404, then `POST` → 201, then a second `POST` → 409. A `PUT`
@@ -873,7 +867,6 @@ edit all three (quickstart §3 rows 14–16).
   - **Offer delete**: deleting an offer linked to 3 services → the services stay, with `offerId
     null`.
   - **Offer rules**: `endDate` before `startDate` → 422; a 120% discount → 422.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
 ### Implementation for User Story 6
 
@@ -962,12 +955,11 @@ edit all three (quickstart §3 rows 14–16).
 - [X] T123 [P] Extend src/conversations/conversations.service.spec.ts and
   src/comments/comments.service.spec.ts: `purgeBefore(cutoff)` delegates to the repository and
   returns its counts.
-- [ ] T124 [P] Create test/retention.e2e-spec.ts (SC-021). Seed through Prisma:
+- [X] T124 [P] Create test/retention.e2e-spec.ts (SC-021). Seed through Prisma:
   - a chat with `updated_at` 13 months ago, with exchanges and a pause event;
   - an active chat with one exchange from 13 months ago and one from 11 months ago;
   - comments from 13 and 11 months ago;
   - a `comment_export_records` row from 13 months ago.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 
   Call `app.get(RetentionService).runOnce()`. Expect:
   - the old chat and its children are gone;
@@ -1032,10 +1024,9 @@ edit all three (quickstart §3 rows 14–16).
     (FR-028, SC-012);
   - confirm that `N8N_BASE_URL` never appears in a response or log;
   - confirm that pause, resume and export have method-level `@Roles('ADMIN')`.
-- [ ] T134 [P] Create test/lists-performance.e2e-spec.ts (SC-006): seed 10,000 chats (one exchange
+- [X] T134 [P] Create test/lists-performance.e2e-spec.ts (SC-006): seed 10,000 chats (one exchange
   each) and 10,000 comments with `createMany`, and assert that the first page of `GET /chats` and
   of `GET /comment-replies` each respond in under 2,000 ms.
-  _Status: the spec is written and typechecks, but it has NOT been run: this environment has no PostgreSQL or Redis. Run `npm run test:e2e` where both are available, then tick this task._
 - [ ] T135 Run everything CI runs: `npm run lint:check`, `npm run build`, `npm test`,
   `npm run test:e2e`. In fekra-dashboard run `npm run lint`, `npm run typecheck`, `npm test`,
   `npm run i18n:check` and `npm run e2e`, including the 001 and 002 suites unchanged (SC-011).
