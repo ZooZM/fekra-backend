@@ -269,7 +269,7 @@ If the customer mentions one of these names, spell it exactly as written here.`;
         ctx.url,
       );
 
-      const systemInstruction = await this.buildImagePrompt(ctx);
+      const systemInstruction = await this.buildVoicePrompt(ctx);
       if (systemInstruction == null) {
         this.logger.error(
           `failed to create systemInstruction for: accountId ${ctx.accountId}, senderId: ${ctx.senderId}, mid: ${ctx.mid}`,
