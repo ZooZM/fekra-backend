@@ -1,0 +1,180 @@
+openapi: 3.1.0
+info:
+  title: Fekra API, n8n data endpoints (feature 004)
+  version: 004
+  description: |
+    Called only by the n8n chat workflows. No JWT: every request carries the shared secret in
+    `x-webhook-secret` (= `N8N_WEBHOOK_SECRET`), compared in constant time. Field names are fixed by
+    the existing workflow. The generated `openapi/openapi.json` must match these shapes.
+
+    Also in this feature: `PATCH /clients/{id}` and `POST /clients` no longer answer
+    `409 DUPLICATE_KEY_ERROR` for `chatWorkflowEndpoint` (shared workflows); every other response
+    is unchanged. `POST /n8n/callback` keeps its contract.
+
+paths:
+  /n8n/leads/context:
+    get:
+      operationId: LeadsController_context
+      summary: The lead and the latest exchanges of one customer on one client account.
+      tags: [Leads]
+      security: [{ n8nSecret: [] }]
+      parameters:
+        - { name: clientId, in: query, required: true, schema: { type: string, format: uuid } }
+        - name: platform
+          in: query
+          required: true
+          description: Case-insensitive.
+          schema: { type: string, enum: [facebook, instagram] }
+        - name: accountId
+          in: query
+          required: true
+          description: Page ID (facebook) or Instagram account ID; must belong to the client.
+          schema: { $ref: '#/components/schemas/ExternalId' }
+        - name: senderId
+          in: query
+          required: true
+          description: The customer (PSID / IGSID).
+          schema: { $ref: '#/components/schemas/ExternalId' }
+        - name: historyLimit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200':
+          description: |
+            `lead` is `null` when there is none for this client. `history` is the last
+            `historyLimit` exchanges of this client's conversation with the customer, oldest first,
+            unanswered ones included (`answered: false`, `reply: ""`); `[]` when there is no
+            conversation. Nothing is created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lead, history]
+                properties:
+                  lead: { oneOf: [{ $ref: '#/components/schemas/Lead' }, { type: 'null' }] }
+                  history:
+                    type: array
+                    items: { $ref: '#/components/schemas/HistoryItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/ClientAccountNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /n8n/leads:
+    post:
+      operationId: LeadsController_upsert
+      summary: Create or merge the lead of one customer on one client account.
+      tags: [Leads]
+      security: [{ n8nSecret: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpsertLead' }
+            example:
+              clientId: 3f0c2a8e-2a51-4d64-9b8e-1a2b3c4d5e6f
+              platform: facebook
+              accountId: '100000000000000'
+              senderId: '7000000000000001'
+              stage: phone_captured
+              phone: '01012345678'
+              country: EG
+              lastIntent: pricing
+              summary: Clothes brand, wants pricing for ads management.
+              fields: { industry: clothes, page_link: '' }
+              claimNotification: true
+      responses:
+        '200':
+          description: |
+            Upsert on (platform, accountId, senderId) in one transaction. `fields` is merged
+            shallowly (non-empty values overwrite, empty ones are ignored); `null`, a missing key or
+            `""` for phone, country, lastIntent and summary keep the stored value; `stage` always
+            takes the sent value. `notifiedNow` is `true` only for the request that set `notifiedAt`
+            (`claimNotification: true` and `notifiedAt` still `null`).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lead, notifiedNow]
+                properties:
+                  lead: { $ref: '#/components/schemas/Lead' }
+                  notifiedNow: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/ClientAccountNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+components:
+  securitySchemes:
+    n8nSecret: { type: apiKey, in: header, name: x-webhook-secret }
+
+  schemas:
+    ExternalId:
+      type: string
+      minLength: 1
+      maxLength: 255
+      pattern: '^[\w.:-]+$'
+    Lead:
+      type: object
+      required: [id, clientId, platform, accountId, senderId, stage, phone, country, lastIntent,
+                 summary, fields, notifiedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        platform: { type: string, enum: [FACEBOOK, INSTAGRAM] }
+        accountId: { type: string }
+        senderId: { type: string }
+        stage: { type: string, example: qualifying }
+        phone: { type: [string, 'null'] }
+        country: { type: [string, 'null'], example: EG }
+        lastIntent: { type: [string, 'null'], example: pricing }
+        summary: { type: [string, 'null'] }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          example: { business_type: brand }
+        notifiedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    HistoryItem:
+      type: object
+      required: [message, reply, answered, createdAt]
+      properties:
+        message: { type: string }
+        reply: { type: string, description: '"" when answered is false' }
+        answered: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    UpsertLead:
+      type: object
+      additionalProperties: false
+      required: [clientId, platform, accountId, senderId, stage]
+      properties:
+        clientId: { type: string, format: uuid }
+        platform: { type: string, enum: [facebook, instagram], description: Case-insensitive. }
+        accountId: { $ref: '#/components/schemas/ExternalId' }
+        senderId: { $ref: '#/components/schemas/ExternalId' }
+        stage: { type: string, minLength: 1, maxLength: 50 }
+        phone: { type: [string, 'null'], maxLength: 30 }
+        country:
+          type: [string, 'null']
+          pattern: '^([A-Za-z]{2})?$'
+          description: Two letters (upper-cased when stored) or "".
+        lastIntent: { type: [string, 'null'], maxLength: 50 }
+        summary: { type: [string, 'null'], maxLength: 1000 }
+        fields:
+          type: object
+          maxProperties: 30
+          propertyNames: { minLength: 1, maxLength: 50 }
+          additionalProperties: { type: string, maxLength: 500 }
+          default: {}
+        claimNotification: { type: boolean, default: false }
+
+  responses:
+    Unauthorized:
+      description: '`UNAUTHORIZED`: missing or wrong `x-webhook-secret`, or no secret configured.'
+    ClientAccountNotFound:
+      description: |
+        `CLIENT_ACCOUNT_NOT_FOUND`: the client does not exist, or `accountId` is not its account on
+        that platform (`fbPageId` for facebook, `instaAccountId` for instagram). Same answer for
+        both, so the response does not reveal which ids exist.
+    ValidationFailed:
+      description: '`INPUT_VALIDATION_ERROR` with `details.formErrors` and `details.fieldErrors`.'
