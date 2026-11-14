@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/002-client-posts-backfill/plan.md`
+`specs/003-chat-frontend-comment-analysis/plan.md`
 <!-- SPECKIT END -->
 
 ## Project constitution

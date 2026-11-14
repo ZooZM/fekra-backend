@@ -1,0 +1,582 @@
+openapi: 3.1.0
+info:
+  title: Fekra Admin API (chat flow, chat workflows, client data, classified comments)
+  version: 1.2.0
+  description: |
+    Design contract for feature 003-chat-frontend-comment-analysis. The OpenAPI document generated
+    from the Zod DTOs (`npm run openapi:export`) MUST match these paths and shapes. Only new and
+    changed operations are listed; everything else is as in features 001 and 002.
+
+    Base URL: `/api` in production (stripped by Caddy before NestJS).
+    Every operation needs a bearer token (401 otherwise). The role is given per operation
+    (403 `FORBIDDEN` otherwise). Errors always use `ErrorBody`; clients branch on `errorCode`.
+
+    Contract changes (justified in plan.md, Complexity Tracking):
+      - Additive: new fields on clients, chats, exchanges and comments; new filters; new
+        operations (`GET /chats/{chatId}`, pause, resume, comments export).
+      - `GET /business-info/client/{clientId}` answers 404 when none exists (was an empty 200).
+      - `PUT /business-info/client/{clientId}` takes a partial body (`clientId` optional).
+      - Services and offers: a malformed `:id` is 422 (was a database error); changing `clientId`
+        on update is 422; a service's `offerId` must belong to the same client (422).
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────────── Clients (changed) ─────────────────────────────
+  /clients:
+    get:
+      operationId: ClientsController_findAll
+      summary: List clients. Adds the chat-subscription filter (FR-046). ADMIN.
+      tags: [Clients]
+      parameters:
+        - name: chatSubscribed
+          in: query
+          required: false
+          description: '`false` lists the clients that still need to be subscribed (the release checklist).'
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: As in feature 001; each item adds `chatWorkflowEndpoint` and `chatSubscribed`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientPage' }
+    post:
+      operationId: ClientsController_create
+      summary: Create a client. Accepts the two chat fields (FR-032, FR-043). ADMIN.
+      tags: [Clients]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: The feature 001 body plus `ChatServiceFields`. `chatSubscribed` defaults to false.
+              allOf: [{ $ref: '#/components/schemas/ChatServiceFields' }]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRecord' }
+        '409': { $ref: '#/components/responses/EndpointTaken' }
+        '422': { $ref: '#/components/responses/ChatServiceInvalid' }
+  /clients/{id}:
+    patch:
+      operationId: ClientsController_update
+      summary: Edit a client. Accepts the two chat fields, with `version` as before (FR-036, FR-045, FR-046). ADMIN.
+      tags: [Clients]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              description: The feature 001 body plus `ChatServiceFields`. `chatWorkflowEndpoint = null` clears it.
+              allOf: [{ $ref: '#/components/schemas/ChatServiceFields' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRecord' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`DUPLICATE_KEY_ERROR` (`details.field = "chatWorkflowEndpoint"`) or `CLIENT_VERSION_CONFLICT` (as in 001).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+        '422': { $ref: '#/components/responses/ChatServiceInvalid' }
+
+  # ───────────────────────────── Conversations ─────────────────────────────
+  /chats:
+    get:
+      operationId: ConversationsController_findAll
+      summary: List conversations, most recent activity first (FR-001, FR-002). ADMIN, CLIENT (own client only).
+      tags: [Conversations]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [updatedAt, createdAt], default: updatedAt }
+        - { $ref: '#/components/parameters/OrderDir' }
+        - name: clientId
+          in: query
+          description: ADMIN only; ignored for CLIENT-role users (scoped from the token).
+          schema: { type: string, format: uuid }
+        - name: platform
+          in: query
+          schema: { type: string, enum: [facebook, instagram, FACEBOOK, INSTAGRAM] }
+        - name: senderId
+          in: query
+          description: Customer identifier, exact match after trimming (the dashboard's search box).
+          schema: { type: string, maxLength: 255, pattern: '^[\w.:-]+$' }
+        - name: receiverId
+          in: query
+          schema: { type: string, maxLength: 255, pattern: '^[\w.:-]+$' }
+        - name: paused
+          in: query
+          description: NEW. `true` = only conversations whose assistant is paused now; `false` = only active ones.
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatPage' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /chats/{chatId}:
+    get:
+      operationId: ConversationsController_findOne
+      summary: NEW. One conversation (thread header, deep links). ADMIN, CLIENT (own client only).
+      tags: [Conversations]
+      parameters: [{ $ref: '#/components/parameters/ChatId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatRecord' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /chats/{chatId}/messages:
+    get:
+      operationId: ConversationsController_findMessages
+      summary: A conversation's exchanges. Adds `answered` to each item (FR-003, FR-011). ADMIN, CLIENT (own client only).
+      tags: [Conversations]
+      parameters:
+        - { $ref: '#/components/parameters/ChatId' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/OrderDir' }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExchangePage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /chats/{chatId}/pause:
+    post:
+      operationId: ConversationsController_pause
+      summary: NEW. Pause the assistant in one conversation (FR-009 to FR-015). Pausing a paused conversation replaces its duration. ADMIN.
+      tags: [Conversations]
+      parameters: [{ $ref: '#/components/parameters/ChatId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PauseBody' }
+      responses:
+        '200':
+          description: The conversation, now paused.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /chats/{chatId}/resume:
+    post:
+      operationId: ConversationsController_resume
+      summary: NEW. Resume the assistant. On an active conversation it changes nothing and records nothing. ADMIN.
+      tags: [Conversations]
+      parameters: [{ $ref: '#/components/parameters/ChatId' }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Classified comments ─────────────────────────────
+  /comment-replies:
+    get:
+      operationId: CommentsController_findAll
+      summary: Classified comments, newest first. Adds the decision-basis filter and fields (FR-016, FR-017, FR-022). ADMIN, CLIENT (own client only).
+      tags: [Comments]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/OrderDir' }
+        - { $ref: '#/components/parameters/CommentFilterClientId' }
+        - { $ref: '#/components/parameters/CommentFilterPlatform' }
+        - { $ref: '#/components/parameters/CommentFilterClassification' }
+        - { $ref: '#/components/parameters/CommentFilterDecisionBasis' }
+        - { $ref: '#/components/parameters/CommentFilterFrom' }
+        - { $ref: '#/components/parameters/CommentFilterTo' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentPage' }
+        '422':
+          description: '`INPUT_VALIDATION_ERROR`, for example `to` before `from` (`details.fieldErrors.to`, FR-018).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorBody' }
+  /comment-replies/export:
+    get:
+      operationId: CommentsController_export
+      summary: NEW. Download every comment matching the filters as CSV, with no row limit. Each download is recorded (FR-024, FR-030). ADMIN.
+      description: |
+        Streamed (chunked, no Content-Length). UTF-8 with BOM, header row, CRLF, RFC 4180 quoting.
+        Cells starting with `=`, `+`, `-`, `@`, TAB or CR are prefixed with `'`.
+        Rows created after the request started are not included. If the stream fails, the
+        connection is closed early, so the download fails instead of producing a short file.
+      tags: [Comments]
+      parameters:
+        - { $ref: '#/components/parameters/CommentFilterClientId' }
+        - { $ref: '#/components/parameters/CommentFilterPlatform' }
+        - { $ref: '#/components/parameters/CommentFilterClassification' }
+        - { $ref: '#/components/parameters/CommentFilterDecisionBasis' }
+        - { $ref: '#/components/parameters/CommentFilterFrom' }
+        - { $ref: '#/components/parameters/CommentFilterTo' }
+      responses:
+        '200':
+          description: 'Columns: id, clientId, clientName, platform, commentId, comment, classification, decisionBasis, decisionModel, reason, createdAt.'
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="comments-20261114-153012.csv"' }
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            text/csv:
+              schema: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  # ───────────────────────────── Client data (changed) ─────────────────────────────
+  /services:
+    get:
+      operationId: ServicesController_findAll
+      summary: Services. Adds the `clientId` filter (FR-037). ADMIN.
+      tags: [Services]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [name, price, createdAt], default: createdAt }
+        - { $ref: '#/components/parameters/OrderDir' }
+        - name: clientId
+          in: query
+          description: NEW. The dashboard always sends it.
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: '`PaginatedResult<Service>`, as today.' }
+    post:
+      operationId: ServicesController_create
+      summary: Create a service. `offerId` must be an offer of the same client (FR-039). ADMIN.
+      tags: [Services]
+      responses:
+        '201': { description: The service. }
+        '422': { $ref: '#/components/responses/OfferNotOfClient' }
+  /services/{id}:
+    get:
+      operationId: ServicesController_findById
+      summary: "One service. CHANGED: a malformed id is 422. ADMIN."
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: The service. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    put:
+      operationId: ServicesController_update
+      summary: Edit a service (partial). `clientId` cannot change; `offerId` must be an offer of the same client. ADMIN.
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: The service. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/OfferNotOfClient' }
+    delete:
+      operationId: ServicesController_remove
+      tags: [Services]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Deleted. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /offers:
+    post:
+      operationId: OffersController_create
+      summary: Create an offer (unchanged rules - end date not before start, percentage ≤ 100). ADMIN.
+      tags: [Offers]
+      responses:
+        '201': { description: The offer. }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    get:
+      operationId: OffersController_findAll
+      summary: Offers. Adds the `clientId` filter (FR-037). ADMIN.
+      tags: [Offers]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [title, startDate, endDate, createdAt], default: createdAt }
+        - { $ref: '#/components/parameters/OrderDir' }
+        - name: clientId
+          in: query
+          description: NEW.
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: '`PaginatedResult<Offer>`, as today.' }
+  /offers/{id}:
+    get:
+      operationId: OffersController_findById
+      summary: "One offer. CHANGED: a malformed id is 422. ADMIN."
+      tags: [Offers]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: The offer. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    patch:
+      operationId: OffersController_update
+      summary: Edit an offer. `clientId` cannot change (422 on `clientId`). Date order and the 100% cap as today. ADMIN.
+      tags: [Offers]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: The offer. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      operationId: OffersController_remove
+      summary: Delete an offer. Its services stay and lose the link (FR-041). ADMIN.
+      tags: [Offers]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Deleted. }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /business-info/client/{clientId}:
+    get:
+      operationId: BusinessInfoController_findByClientId
+      summary: "A client's business information. CHANGED: 404 when there is none. ADMIN."
+      tags: [BusinessInfo]
+      parameters: [{ $ref: '#/components/parameters/ClientIdPath' }]
+      responses:
+        '200': { description: The business information. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      operationId: BusinessInfoController_create
+      summary: Create it (as today). 409 `DUPLICATE_KEY_ERROR` if it exists. ADMIN.
+      tags: [BusinessInfo]
+      parameters: [{ $ref: '#/components/parameters/ClientIdPath' }]
+      responses:
+        '201': { description: Created. }
+        '409': { description: Already exists. }
+    put:
+      operationId: BusinessInfoController_updateByClientId
+      summary: CHANGED. Partial update; an omitted field is unchanged, null clears a nullable field. `clientId` in the body is optional and must equal the route's. ADMIN.
+      tags: [BusinessInfo]
+      parameters: [{ $ref: '#/components/parameters/ClientIdPath' }]
+      responses:
+        '200': { description: Updated. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      operationId: BusinessInfoController_removeByClientId
+      summary: "Delete a client's business information. CHANGED: a malformed clientId is 422. ADMIN."
+      tags: [BusinessInfo]
+      parameters: [{ $ref: '#/components/parameters/ClientIdPath' }]
+      responses:
+        '200': { description: Deleted. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    ChatId: { name: chatId, in: path, required: true, schema: { type: string, format: uuid } }
+    ClientIdPath: { name: clientId, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    OrderDir: { name: orderDir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+    CommentFilterClientId:
+      name: clientId
+      in: query
+      description: ADMIN only; CLIENT-role users are scoped from the token.
+      schema: { type: string, format: uuid }
+    CommentFilterPlatform:
+      name: platform
+      in: query
+      schema: { type: string, enum: [facebook, instagram, FACEBOOK, INSTAGRAM] }
+    CommentFilterClassification:
+      name: classification
+      in: query
+      description: Case-insensitive.
+      schema: { type: string, enum: [engagement, inquiry, unsure, complaint, spam, insult] }
+    CommentFilterDecisionBasis:
+      name: decisionBasis
+      in: query
+      description: NEW. Case-insensitive.
+      schema: { type: string, enum: [rules, ai_model, safe_fallback, unknown] }
+    CommentFilterFrom: { name: from, in: query, schema: { type: string, format: date-time } }
+    CommentFilterTo: { name: to, in: query, schema: { type: string, format: date-time } }
+
+  responses:
+    NotFound:
+      description: '`NOT_FOUND`. Also returned for another client''s data (no hint that it exists).'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    Forbidden:
+      description: '`FORBIDDEN`: the role is not allowed.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    ValidationFailed:
+      description: '`INPUT_VALIDATION_ERROR` with `details.formErrors` and `details.fieldErrors`.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    EndpointTaken:
+      description: '`DUPLICATE_KEY_ERROR`, `details.field = "chatWorkflowEndpoint"` (FR-034).'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    ChatServiceInvalid:
+      description: |
+        `INPUT_VALIDATION_ERROR`. `details.fieldErrors.chatWorkflowEndpoint` when the endpoint
+        format is wrong (FR-035), when subscribing without an endpoint, or when clearing the
+        endpoint of a subscribed client (FR-045).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+    OfferNotOfClient:
+      description: '`INPUT_VALIDATION_ERROR`, `details.fieldErrors.offerId` (unknown offer or another client''s) or `details.fieldErrors.clientId` (changed on update).'
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorBody' } } }
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [statusCode, message, errorCode]
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+        errorCode: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    PageMeta:
+      type: object
+      required: [total, page, limit, totalPages]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        totalPages: { type: integer }
+
+    ChatServiceFields:
+      type: object
+      properties:
+        chatWorkflowEndpoint:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 100
+          pattern: '^[A-Za-z0-9_-]{1,100}$'
+          description: One path segment, added to the fixed base address. Unique across clients.
+        chatSubscribed:
+          type: boolean
+          description: Requires an endpoint. Only subscribed clients have private messages handed to their workflow.
+
+    ClientRecord:
+      description: The feature 001 record plus the two chat fields (never the access token).
+      allOf:
+        - type: object
+          required: [id, name, version]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            version: { type: integer }
+        - type: object
+          required: [chatWorkflowEndpoint, chatSubscribed]
+          properties:
+            chatWorkflowEndpoint: { type: [string, 'null'] }
+            chatSubscribed: { type: boolean }
+    ClientPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ClientRecord' } }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    LastExchange:
+      type: object
+      required: [message, reply, answered, createdAt]
+      properties:
+        message: { type: string, maxLength: 200, description: First 200 characters. }
+        reply: { type: string, maxLength: 200, description: 'Empty when `answered` is false.' }
+        answered: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ChatRecord:
+      type: object
+      required: [id, clientId, clientName, platform, senderId, receiverId, createdAt, updatedAt, paused, pausedAt, pausedUntil, pausedBy, lastExchange]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        clientName: { type: string }
+        platform: { type: string, enum: [FACEBOOK, INSTAGRAM] }
+        senderId: { type: string, description: The customer identifier. }
+        receiverId: { type: string, description: The client's page or Instagram account. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, description: Last activity. }
+        paused: { type: boolean, description: Effective state now. }
+        pausedAt: { type: [string, 'null'], format: date-time }
+        pausedUntil: { type: [string, 'null'], format: date-time, description: 'null with `paused` = until resumed.' }
+        pausedBy:
+          description: ADMIN readers only; always null for CLIENT-role readers.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+        lastExchange:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/LastExchange'
+    ChatPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ChatRecord' } }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    PauseBody:
+      type: object
+      additionalProperties: false
+      required: [duration]
+      properties:
+        duration: { type: string, enum: [until_resumed, 1h, 24h, 7d] }
+
+    ExchangeRecord:
+      type: object
+      required: [id, chatId, message, reply, answered, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        chatId: { type: string, format: uuid }
+        message: { type: string, description: 'Batched messages are joined with a line break.' }
+        reply: { type: string, description: 'Empty when `answered` is false.' }
+        answered: { type: boolean, description: 'NEW. false = the assistant did not answer (paused).' }
+        createdAt: { type: string, format: date-time }
+    ExchangePage:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ExchangeRecord' } }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    CommentRecord:
+      type: object
+      required: [id, clientId, clientName, platform, commentId, comment, classification, reason, decisionBasis, decisionModel, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        clientName: { type: string, description: NEW. }
+        platform: { type: string, enum: [FACEBOOK, INSTAGRAM] }
+        commentId: { type: string }
+        comment: { type: string, description: 'Empty for a sticker or GIF.' }
+        classification: { type: string, enum: [ENGAGEMENT, INQUIRY, UNSURE, COMPLAINT, SPAM, INSULT] }
+        reason: { type: string }
+        decisionBasis: { type: string, enum: [RULES, AI_MODEL, SAFE_FALLBACK, UNKNOWN], description: NEW. }
+        decisionModel: { type: [string, 'null'], description: 'NEW. The model name for AI_MODEL.' }
+        createdAt: { type: string, format: date-time }
+    CommentPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CommentRecord' } }
+        meta: { $ref: '#/components/schemas/PageMeta' }
