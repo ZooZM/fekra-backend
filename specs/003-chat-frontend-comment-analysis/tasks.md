@@ -235,20 +235,20 @@ row 7).
 
 ### Dashboard for User Story 1 (`fekra-dashboard`)
 
-- [ ] T024 [US1] Run `npm run api:types` in fekra-dashboard (after T023) and commit
+- [X] T024 [US1] Run `npm run api:types` in fekra-dashboard (after T023) and commit
   fekra-dashboard/src/api/schema.d.ts.
-- [ ] T025 [P] [US1] Add conversation fixtures and handlers:
+- [X] T025 [P] [US1] Add conversation fixtures and handlers:
   - fekra-dashboard/src/test/fixtures/conversations.ts: a page with a paused row, an unanswered
     last exchange, an Arabic message and a chat with `lastExchange: null`;
   - MSW handlers for `GET /chats`, `GET /chats/:chatId` and `GET /chats/:chatId/messages` in
     fekra-dashboard/src/test/handlers.ts.
-- [ ] T026 [P] [US1] Create fekra-dashboard/src/features/conversations/queries.ts (+ queries.test.ts):
+- [X] T026 [P] [US1] Create fekra-dashboard/src/features/conversations/queries.ts (+ queries.test.ts):
   - `useConversations(filters)`: infinite, 20 per page, `meta.page < meta.totalPages`;
   - `useConversation(chatId)`;
   - `useExchanges(chatId)`: infinite, `orderDir=desc`, reversed for display.
 
   Filters come from the URL search params (`platform`, `clientId`, `paused`, `senderId`).
-- [ ] T027 [US1] Create the list in fekra-dashboard/src/features/conversations/:
+- [X] T027 [US1] Create the list in fekra-dashboard/src/features/conversations/:
   conversations-page.tsx, conversation-row.tsx and conversations-page.test.tsx, as
   contracts/dashboard-ui.md "Conversations list":
   - filters, the exact search box (trimmed), **Load more** and **Refresh**;
@@ -257,17 +257,17 @@ row 7).
   - states: empty, "No conversation found for this identifier", loading skeleton.
 
   Tests cover each of these states and the filter → URL sync.
-- [ ] T028 [US1] Create fekra-dashboard/src/features/conversations/conversation-page.tsx (+
+- [X] T028 [US1] Create fekra-dashboard/src/features/conversations/conversation-page.tsx (+
   conversation-page.test.tsx): header (client, platform, identifier), thread oldest-at-top with
   **Load earlier**, bubbles with `white-space: pre-wrap` and `dir="auto"`, "Not answered by the
   assistant" for `answered: false`, and a 404 state with a link back (FR-003 to FR-006).
-- [ ] T029 [US1] Wire the routes and navigation:
+- [X] T029 [US1] Wire the routes and navigation:
   - add `conversations` and `conversations/:chatId` under the admin routes in
     fekra-dashboard/src/app/router.tsx;
   - add a **Conversations** link in fekra-dashboard/src/components/app-shell.tsx;
   - add every new string to fekra-dashboard/src/i18n/en.json and ar.json, then run
     `npm run i18n:check`.
-- [ ] T030 [US1] Create fekra-dashboard/e2e/conversations-us1.spec.ts:
+- [X] T030 [US1] Create fekra-dashboard/e2e/conversations-us1.spec.ts:
   - search by identifier → open the thread → the latest exchange is visible (SC-001);
   - load earlier, filters, the empty state;
   - an axe check in English and Arabic.
@@ -399,24 +399,24 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
 
 ### Dashboard for User Story 2 (`fekra-dashboard`)
 
-- [ ] T046 [US2] Run `npm run openapi:export` in the backend and `npm run api:types` in
+- [X] T046 [US2] Run `npm run openapi:export` in the backend and `npm run api:types` in
   fekra-dashboard. Add MSW handlers for `POST /chats/:chatId/pause` and `/resume` in
   fekra-dashboard/src/test/handlers.ts.
-- [ ] T047 [P] [US2] Create fekra-dashboard/src/features/conversations/pause-dialog.tsx (+
+- [X] T047 [P] [US2] Create fekra-dashboard/src/features/conversations/pause-dialog.tsx (+
   pause-dialog.test.tsx):
   - a radio group (Until I resume · 1 hour · 24 hours · 7 days), confirm and cancel;
   - focus is trapped and returns to the trigger;
   - it calls a `usePauseConversation` mutation, added to queries.ts, that invalidates the
     conversation and the list.
-- [ ] T048 [US2] In fekra-dashboard/src/features/conversations/conversation-page.tsx (+ test) add the
+- [X] T048 [US2] In fekra-dashboard/src/features/conversations/conversation-page.tsx (+ test) add the
   pause control from contracts/dashboard-ui.md "Pause control":
   - **active**: a **Pause assistant** button;
   - **paused**: a `role="status"` banner with `pausedBy.name`, `pausedAt`, and `pausedUntil` or
     "until you resume it", plus **Resume** and **Change duration**;
   - a past `pausedUntil` renders as active.
-- [ ] T049 [US2] In conversation-row.tsx and conversations-page.tsx (+ test) add the **Paused** badge
+- [X] T049 [US2] In conversation-row.tsx and conversations-page.tsx (+ test) add the **Paused** badge
   ("until 18:30" / "until resumed") and the **Only paused** switch (`paused=true` in the URL).
-- [ ] T050 [US2] Create fekra-dashboard/e2e/conversations-us2.spec.ts: pause with 24 hours → banner
+- [X] T050 [US2] Create fekra-dashboard/e2e/conversations-us2.spec.ts: pause with 24 hours → banner
   and badge; change duration; resume; keyboard-only flow; axe in English and Arabic.
 
 **Checkpoint**: US1 and US2 work together. Pausing stops replies and is recorded.
@@ -479,22 +479,22 @@ rows with `clientName`, and `meta.total` matches. The dashboard `/comments` show
 
 ### Dashboard for User Story 3 (`fekra-dashboard`)
 
-- [ ] T060 [P] [US3] Run `npm run api:types`. Add fekra-dashboard/src/test/fixtures/comments.ts
+- [X] T060 [P] [US3] Run `npm run api:types`. Add fekra-dashboard/src/test/fixtures/comments.ts
   (every label and basis, an empty comment, a 3,000-character Arabic comment) and a `GET
   /comment-replies` handler.
-- [ ] T061 [P] [US3] Create fekra-dashboard/src/features/comments/queries.ts (+ queries.test.ts):
+- [X] T061 [P] [US3] Create fekra-dashboard/src/features/comments/queries.ts (+ queries.test.ts):
   `useComments(filters)`, infinite by 20, with the filters from the URL (`classification`,
   `decisionBasis`, `platform`, `clientId`, `from`, `to`).
-- [ ] T062 [US3] Create fekra-dashboard/src/features/comments/comments-page.tsx (+
+- [X] T062 [US3] Create fekra-dashboard/src/features/comments/comments-page.tsx (+
   comments-page.test.tsx), as contracts/dashboard-ui.md "Comments" items 1–4 and 6:
   - columns: date, client, platform, comment (`dir="auto"`, "No text", **Show all**), label tag,
     **Decided by** (Rules · AI model ({model}) · Safe fallback · Unknown) and reason;
   - filters and the total "{n} comments";
   - `to` < `from` is blocked in the form, and the server 422 is shown on the field;
   - the FR-020 note and the empty state.
-- [ ] T063 [US3] Add the `comments` route to fekra-dashboard/src/app/router.tsx, a **Comments** link
+- [X] T063 [US3] Add the `comments` route to fekra-dashboard/src/app/router.tsx, a **Comments** link
   to app-shell.tsx, and the strings to i18n en.json and ar.json (`npm run i18n:check`).
-- [ ] T064 [US3] Create fekra-dashboard/e2e/comments-us3.spec.ts: filter by label and decided-by →
+- [X] T064 [US3] Create fekra-dashboard/e2e/comments-us3.spec.ts: filter by label and decided-by →
   the total updates; expand a long comment; axe in English and Arabic.
 
 **Checkpoint**: Collected comments are visible and filterable.
@@ -616,7 +616,7 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
 
 ### Dashboard for User Story 4 (`fekra-dashboard`)
 
-- [ ] T079 [P] [US4] Create fekra-dashboard/src/features/comments/download-csv.ts (+
+- [X] T079 [P] [US4] Create fekra-dashboard/src/features/comments/download-csv.ts (+
   download-csv.test.ts):
   - an authenticated `fetch` of `/comment-replies/export?…` with the session's bearer token;
   - it reads the body to the end, then saves a blob with the server's filename;
@@ -624,12 +624,12 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
   - it throws on `!ok`, on a stream error and on a network error, and saves nothing on failure.
 
   Tests with MSW: success; a 403; a stream that errors midway.
-- [ ] T080 [US4] On fekra-dashboard/src/features/comments/comments-page.tsx (+ test) add **Download
+- [X] T080 [US4] On fekra-dashboard/src/features/comments/comments-page.tsx (+ test) add **Download
   CSV** with the current filters:
   - a spinner and "Preparing {meta.total} rows…" with `aria-live="polite"`;
   - on failure the toast "The download did not finish. Try again." (contracts/dashboard-ui.md
     item 5).
-- [ ] T081 [US4] Create fekra-dashboard/e2e/comments-us4.spec.ts: filter, then download → a file
+- [X] T081 [US4] Create fekra-dashboard/e2e/comments-us4.spec.ts: filter, then download → a file
   saved with the expected name (Playwright `download` event); a mocked aborted stream → the error
   toast and no download; time under 1 min (SC-008).
 
@@ -787,28 +787,28 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
 
 ### Dashboard for User Story 5 (`fekra-dashboard`)
 
-- [ ] T098 [US5] Run `npm run openapi:export` and `npm run api:types`. Update the client fixtures in
+- [X] T098 [US5] Run `npm run openapi:export` and `npm run api:types`. Update the client fixtures in
   fekra-dashboard/src/test/ with `chatSubscribed` and `chatWorkflowEndpoint`.
-- [ ] T099 [P] [US5] Form schema and errors in fekra-dashboard/src/features/clients/client-form/:
+- [X] T099 [P] [US5] Form schema and errors in fekra-dashboard/src/features/clients/client-form/:
   - schema.ts: endpoint regex and "subscribed needs endpoint";
   - server-errors.ts: map `DUPLICATE_KEY_ERROR` with `details.field = chatWorkflowEndpoint` and
     the 422 `fieldErrors.chatWorkflowEndpoint` onto the field;
   - extend the existing tests next to them.
-- [ ] T100 [US5] In fekra-dashboard/src/features/clients/client-form/settings-sections.tsx (+
+- [X] T100 [US5] In fekra-dashboard/src/features/clients/client-form/settings-sections.tsx (+
   settings-sections.test.tsx) add the **Chat service** section from contracts/dashboard-ui.md:
   - the endpoint field (`dir="ltr"`, helper text, no base address);
   - the subscription switch, disabled with "Enter an endpoint first";
   - "Unsubscribe first" when the endpoint is cleared while subscribed.
 
   The section is used by both create-page.tsx and edit-page.tsx.
-- [ ] T101 [P] [US5] On the clients list:
+- [X] T101 [P] [US5] On the clients list:
   - in fekra-dashboard/src/features/clients/list-page.tsx (+ list-page.test.tsx) add the **Chat
     service** badge column and the **Only not subscribed** switch (`chatSubscribed=false` in the
     URL);
   - in queries.ts, pass the filter through.
-- [ ] T102 [US5] In fekra-dashboard/src/features/clients/detail-page.tsx (+ detail-page.test.tsx)
+- [X] T102 [US5] In fekra-dashboard/src/features/clients/detail-page.tsx (+ detail-page.test.tsx)
   show the endpoint and the subscription in the client's details.
-- [ ] T103 [US5] Create fekra-dashboard/e2e/chat-service.spec.ts:
+- [X] T103 [US5] Create fekra-dashboard/e2e/chat-service.spec.ts:
   - set an endpoint and subscribe → saved; a duplicate endpoint → field error;
   - subscribe without an endpoint is impossible;
   - the **Only not subscribed** filter;
@@ -900,37 +900,37 @@ edit all three (quickstart §3 rows 14–16).
 
 ### Dashboard for User Story 6 (`fekra-dashboard`)
 
-- [ ] T115 [US6] Run `npm run api:types`. Add fekra-dashboard/src/test/fixtures/client-data.ts and
+- [X] T115 [US6] Run `npm run api:types`. Add fekra-dashboard/src/test/fixtures/client-data.ts and
   MSW handlers for business-info, services and offers, including the 404 and 422 cases.
-- [ ] T116 [P] [US6] Create fekra-dashboard/src/features/client-data/queries.ts (+ queries.test.ts):
+- [X] T116 [P] [US6] Create fekra-dashboard/src/features/client-data/queries.ts (+ queries.test.ts):
   - `useBusinessInfo(clientId)`, where a 404 means `null`;
   - `useServices(clientId)` and `useOffers(clientId)`, infinite by 20 and sortable;
   - the mutations, which invalidate the matching lists.
-- [ ] T117 [US6] Add client tabs and routes:
+- [X] T117 [US6] Add client tabs and routes:
   - tabs **Details · Business info · Services · Offers · Posts** on
     fekra-dashboard/src/features/clients/detail-page.tsx;
   - routes `clients/:id/business-info`, `clients/:id/services` and `clients/:id/offers` in
     fekra-dashboard/src/app/router.tsx.
-- [ ] T118 [P] [US6] Create fekra-dashboard/src/features/client-data/business-info-page.tsx (+
+- [X] T118 [P] [US6] Create fekra-dashboard/src/features/client-data/business-info-page.tsx (+
   test):
   - a 404 shows an empty form and **Create**; otherwise **Save** sends a full `PUT`;
   - **Delete** with confirmation;
   - row editors for social links, map links and work hours, and tag inputs for payment and
     installment options;
   - `dir="auto"` on text fields.
-- [ ] T119 [P] [US6] Create fekra-dashboard/src/features/client-data/services-page.tsx and
+- [X] T119 [P] [US6] Create fekra-dashboard/src/features/client-data/services-page.tsx and
   service-form.tsx (+ tests):
   - a table with sorting and **Load more**;
   - variants as rows with names unique per service;
   - an offer select showing only this client's offers;
   - the 422 errors on `offerId` and `clientId` mapped onto the fields;
   - **Delete** with a confirmation dialog (FR-041).
-- [ ] T120 [P] [US6] Create fekra-dashboard/src/features/client-data/offers-page.tsx, offer-form.tsx
+- [X] T120 [P] [US6] Create fekra-dashboard/src/features/client-data/offers-page.tsx, offer-form.tsx
   and delete-offer-dialog.tsx (+ tests):
   - the linked-services count;
   - discount type and value rules, and the date order checked before sending;
   - the delete dialog text "This offer covers N services. They will stay, without an offer."
-- [ ] T121 [US6] Add every string to i18n en.json and ar.json (`npm run i18n:check`), then create
+- [X] T121 [US6] Add every string to i18n en.json and ar.json (`npm run i18n:check`), then create
   fekra-dashboard/e2e/client-data.spec.ts: create business info, 5 services and 2 offers within
   10 minutes (SC-017); edit one; delete an offer; axe in English and Arabic.
 
@@ -1027,7 +1027,7 @@ edit all three (quickstart §3 rows 14–16).
 - [X] T134 [P] Create test/lists-performance.e2e-spec.ts (SC-006): seed 10,000 chats (one exchange
   each) and 10,000 comments with `createMany`, and assert that the first page of `GET /chats` and
   of `GET /comment-replies` each respond in under 2,000 ms.
-- [ ] T135 Run everything CI runs: `npm run lint:check`, `npm run build`, `npm test`,
+- [X] T135 Run everything CI runs: `npm run lint:check`, `npm run build`, `npm test`,
   `npm run test:e2e`. In fekra-dashboard run `npm run lint`, `npm run typecheck`, `npm test`,
   `npm run i18n:check` and `npm run e2e`, including the 001 and 002 suites unchanged (SC-011).
 - [ ] T136 Walk through quickstart.md §3 (Postman rows 1–17) and §4 (SQL checks) against a local
