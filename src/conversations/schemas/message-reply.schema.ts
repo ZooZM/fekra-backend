@@ -18,15 +18,46 @@ export const CreateMessageReplySchema = z.strictObject({
   reply: storableText(MAX_REPLY_LENGTH),
 });
 
+// ── Write: a customer message the assistant did not answer (the conversation is paused) ──
+// Stored with an empty reply and answered = false.
+export const CreateUnansweredMessageSchema = z.strictObject({
+  chatId: z.uuid(),
+  message: storableText(MAX_MESSAGE_LENGTH),
+});
+
 // ── Read: GET /chats/:chatId/messages (chatId comes from the route) ──
 // Newest first by default. Pass orderDir=asc to read a conversation top to bottom.
 export const QueryMessageReplySchema = listQuery(['createdAt'], 'createdAt')
   .extend({ ...dateRangeFields })
   .refine(rangeIsOrdered, RANGE_ERROR);
 
+// ── Response shapes (OpenAPI only) ──
+export const ExchangeRecordSchema = z.object({
+  id: z.uuid(),
+  chatId: z.uuid(),
+  message: z.string(),
+  reply: z.string(),
+  answered: z.boolean(),
+  createdAt: z.iso.datetime(),
+});
+
+export const ExchangePageSchema = z.object({
+  data: z.array(ExchangeRecordSchema),
+  meta: z.object({
+    total: z.number().int(),
+    page: z.number().int(),
+    limit: z.number().int(),
+    totalPages: z.number().int(),
+  }),
+});
+
 export class QueryMessageReplyDto extends createZodDto(
   QueryMessageReplySchema,
 ) {}
+export class ExchangePageDto extends createZodDto(ExchangePageSchema) {}
 
 export type CreateMessageReplyInput = z.infer<typeof CreateMessageReplySchema>;
+export type CreateUnansweredMessageInput = z.infer<
+  typeof CreateUnansweredMessageSchema
+>;
 export type QueryMessageReplyInput = z.infer<typeof QueryMessageReplySchema>;

@@ -1,4 +1,5 @@
 import {
+  ClientIdParamSchema,
   emailField,
   graphCursor,
   httpUrl,
@@ -78,5 +79,16 @@ describe('common zod primitives', () => {
     expect(
       IdParamSchema.safeParse({ id: 'not-an-id', extra: true }).success,
     ).toBe(false);
+  });
+
+  it('validates the :clientId route param', () => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    expect(ClientIdParamSchema.safeParse({ clientId: id }).success).toBe(true);
+    expect(ClientIdParamSchema.safeParse({ clientId: 'x' }).success).toBe(
+      false,
+    );
+    expect(ClientIdParamSchema.safeParse({ clientId: id, id }).success).toBe(
+      false,
+    );
   });
 });

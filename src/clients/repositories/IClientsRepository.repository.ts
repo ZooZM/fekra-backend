@@ -3,6 +3,7 @@ import { CreateClientData } from '../interfaces/create-client-data.interface';
 import { UpdateClientData } from '../interfaces/update-client-data.interface';
 import {
   AccountField,
+  ChatRoute,
   ClientActor,
   ClientRecord,
   ClientRef,
@@ -46,6 +47,21 @@ export interface IClientsRepository extends Omit<
     excludeId?: string,
   ): Promise<AccountField | null>;
   getClientDataForWorkFlow(brandId: string): Promise<ClientWorkflowData | null>;
+
+  /**
+   * The chat route by account id. Reads the database first and refreshes the cache; falls back to
+   * the cached copy only when the database fails (research R16). null: unknown account.
+   */
+  findChatRoute(accountId: string): Promise<ChatRoute | null>;
+  /** The chat route by client id. Never cached; throws when the database fails. */
+  findChatRouteById(clientId: string): Promise<ChatRoute | null>;
+  /** Like getClientDataForWorkFlow, but database first (cache only as an outage fallback). */
+  findWorkflowDataFresh(accountId: string): Promise<ClientWorkflowData | null>;
+  /** true when another client already uses this endpoint. */
+  findChatEndpointConflict(
+    endpoint: string,
+    excludeId?: string,
+  ): Promise<boolean>;
   getAccessToken(clientId: string): Promise<string | null>;
   /**
    * Records a reply run starting or stopping. No client row changes, so this is one insert and

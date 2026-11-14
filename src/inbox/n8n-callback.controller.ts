@@ -8,6 +8,8 @@ import {
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 import { N8nDeliveryService } from './n8n-delivery.service';
 import { MessageSenderService } from './message-sender.service';
 import { CommentReplyService, CommentType } from './comment-reply.service';
@@ -20,6 +22,7 @@ export class N8nCallbackController {
     private readonly delivery: N8nDeliveryService,
     private readonly messageSender: MessageSenderService,
     private readonly commentReply: CommentReplyService,
+    private readonly config: ConfigService,
   ) {}
 
   @Post('callback')
@@ -37,8 +40,7 @@ export class N8nCallbackController {
     },
     @Headers('x-webhook-secret') secret: string | undefined,
   ) {
-    const expected = process.env.N8N_WEBHOOK_SECRET;
-    if (!expected || secret !== expected) throw new UnauthorizedException();
+    if (!this.isAuthorized(secret)) throw new UnauthorizedException();
     if (!body?.id) throw new BadRequestException('id is required');
     if (body.type && !['engagement', 'question'].includes(body.type)) {
       throw new BadRequestException('type must be engagement or question');
@@ -62,5 +64,18 @@ export class N8nCallbackController {
       });
     }
     return { acknowledged: true };
+  }
+
+  /**
+   * The shared secret n8n sends. Read through ConfigService and compared in constant time, so the
+   * response time cannot be used to guess it (constitution IV, VIII). Different lengths are
+   * refused without comparing, because timingSafeEqual needs equal lengths.
+   */
+  private isAuthorized(provided: string | undefined): boolean {
+    const expected = this.config.get<string>('N8N_WEBHOOK_SECRET');
+    if (!expected || !provided) return false;
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 }

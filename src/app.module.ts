@@ -20,6 +20,7 @@ import { AppZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { GraphApiModule } from './inbox/graph-api.module';
 import { CommentsModule } from './comments/comments.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { RetentionModule } from './retention/retention.module';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
@@ -51,6 +52,7 @@ function devModules() {
     BusinessInfoModule,
     OffersModule,
     InboxModule,
+    RetentionModule,
     MetaWebhookModule,
     GraphApiModule,
     ...devModules(),

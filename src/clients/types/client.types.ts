@@ -29,6 +29,14 @@ export type ClientWorkflowData = ClientRecord & {
   businessInfo: BusinessInfoRecord | null;
 };
 
+/** What the chat path needs to decide where a client's DMs go (research R1). */
+export interface ChatRoute {
+  clientId: string;
+  name: string;
+  chatSubscribed: boolean;
+  chatWorkflowEndpoint: string | null;
+}
+
 /** The admin who made a change; copied into the activity log. */
 export interface ClientActor {
   id: string;

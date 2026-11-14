@@ -47,7 +47,7 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
 
 **Purpose**: Configuration and the test helper the e2e suites of this feature use.
 
-- [ ] T001 [P] Update .env.example:
+- [X] T001 [P] Update .env.example:
   - in the `# --- n8n ---` block, replace `N8N_WEBHOOK_URL=` with `N8N_BASE_URL=` and a comment
     "Fixed base address of the n8n chat workflows; each client's endpoint is appended (required
     in production)";
@@ -57,7 +57,7 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
     minimum 1").
 
   Research R3, R5, R9, R15.
-- [ ] T002 [P] In test/utils/e2e-env.ts set only the values that cannot change the existing suites:
+- [X] T002 [P] In test/utils/e2e-env.ts set only the values that cannot change the existing suites:
   - `N8N_BASE_URL = 'http://n8n.e2e.test/webhook/'` and `N8N_WEBHOOK_SECRET ??= 'e2e-n8n-secret'`;
   - `PAUSE_SWEEP_INTERVAL_MS = '3600000'`, so tests call the sweeper themselves;
   - `RETENTION_MONTHS = '12'`.
@@ -67,7 +67,7 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
   the top of its own file, before `createE2eApp()`. test/backfill-runs.e2e-spec.ts sends comments
   through the LLM path and must keep today's values. After this task, run
   `npm run test:e2e -- backfill-runs` and confirm it is unchanged.
-- [ ] T003 [P] Create test/utils/n8n-stub.ts, modelled on test/utils/graph-stub.ts. It exports:
+- [X] T003 [P] Create test/utils/n8n-stub.ts, modelled on test/utils/graph-stub.ts. It exports:
   - `stubN8n(handler?: (url: URL, body: unknown) => { status?: number } | undefined)`: wraps the
     **current** `global.fetch`, so it works together with `stubGraph`. Requests whose origin
     equals `new URL(process.env.N8N_BASE_URL).origin` are recorded and answered with the handler's
@@ -83,7 +83,7 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Edit prisma/schema.prisma exactly as data-model.md §1–§6:
+- [X] T004 Edit prisma/schema.prisma exactly as data-model.md §1–§6:
   - `Client`: `chatWorkflowEndpoint String? @unique @map("chat_workflow_endpoint")
     @db.VarChar(100)` and `chatSubscribed Boolean @default(false) @map("chat_subscribed")`.
   - `Chat`: `pausedAt`, `pausedUntil` (`DateTime?`), `pausedById` (`String? @db.Uuid`),
@@ -99,7 +99,7 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
     `@@index([actorId])` and `@@index([createdAt])`.
   - Update the comment above `model Chat` that says "decide a retention period": it is now
     `RETENTION_MONTHS` (FR-049).
-- [ ] T005 Run `npx prisma migrate dev --create-only --name chat_workflow_pause_export`. In the
+- [X] T005 Run `npx prisma migrate dev --create-only --name chat_workflow_pause_export`. In the
   generated prisma/migrations/<ts>_chat_workflow_pause_export/migration.sql, append:
 
   ```sql
@@ -112,27 +112,27 @@ retention (FR-049, FR-050) is cross-cutting and has its own phase before Polish.
     have a default, with no `DROP` (data-model §9, constitution VI).
   - Run `npm run build` and fix any compile error from the regenerated client. There should be
     none: every new column is optional or has a default.
-- [ ] T006 [P] Create src/common/zod/meta-fields.spec.ts. These tests MUST fail before T007:
+- [X] T006 [P] Create src/common/zod/meta-fields.spec.ts. These tests MUST fail before T007:
   - `decisionBasisField` accepts `rules`, `AI_MODEL`, ` safe_fallback ` and `Unknown`, and outputs
     `RULES`, `AI_MODEL`, `SAFE_FALLBACK` and `UNKNOWN`;
   - it rejects `ai-model` and `model`;
   - add a check of the existing `classificationField`, which has no test today.
-- [ ] T007 In src/common/zod/meta-fields.ts add `decisionBasisField`, following
+- [X] T007 In src/common/zod/meta-fields.ts add `decisionBasisField`, following
   `classificationField`: lowercase input enum `['rules','ai_model','safe_fallback','unknown']` →
   `CommentDecisionBasis`. Use a `satisfies Record<Lowercase<CommentDecisionBasis>, …>` map so a new
   enum value fails to compile.
-- [ ] T008 [P] Add tests to src/common/zod/primitives.spec.ts for `ClientIdParamSchema`: it
+- [X] T008 [P] Add tests to src/common/zod/primitives.spec.ts for `ClientIdParamSchema`: it
   accepts `{ clientId: <uuid> }`, rejects a non-UUID and rejects extra keys. They MUST fail
   before T009.
-- [ ] T009 Add `ClientIdParamSchema = z.strictObject({ clientId: z.uuid() })` to
+- [X] T009 Add `ClientIdParamSchema = z.strictObject({ clientId: z.uuid() })` to
   src/common/zod/primitives.ts and `ClientIdParamDto` to src/common/zod/dtos.ts.
-- [ ] T010 [P] Create src/common/zod/json-readers.spec.ts for `readExportFilters`:
+- [X] T010 [P] Create src/common/zod/json-readers.spec.ts for `readExportFilters`:
   - a valid object round-trips (dates as ISO strings);
   - an invalid stored value falls back the same way the other readers do. Read
     src/common/zod/json-readers.ts for the existing `reader(...)` behavior and mirror it.
 
   These tests MUST fail before T011.
-- [ ] T011 Add `ExportFiltersSchema` to src/common/zod/json-columns.schema.ts: `z.strictObject({
+- [X] T011 Add `ExportFiltersSchema` to src/common/zod/json-columns.schema.ts: `z.strictObject({
   clientId?: uuid, platform?, classification?, decisionBasis?, commentId?, from?: iso datetime,
   to?: iso datetime, snapshotAt: iso datetime })`. Store the enums as their database values. Add
   the type `ExportFilters`, and `readExportFilters` to src/common/zod/json-readers.ts.
@@ -156,11 +156,11 @@ row 7).
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T012 [P] [US1] Extend src/conversations/schemas/reply-schemas.spec.ts:
+- [X] T012 [P] [US1] Extend src/conversations/schemas/reply-schemas.spec.ts:
   - `QueryChatSchema` accepts `paused=true|false` (→ boolean), trims `senderId`, and rejects
     `paused=yes`;
   - the default order stays `updatedAt desc`.
-- [ ] T013 [P] [US1] Create src/conversations/mappers/chat.mapper.spec.ts for
+- [X] T013 [P] [US1] Create src/conversations/mappers/chat.mapper.spec.ts for
   `toChatRecord(row, lastExchange, { isAdmin, now })`:
   - **paused**: `pausedAt` set and `pausedUntil` null → `paused: true`; `pausedUntil` in the
     future → paused; `pausedUntil` in the past → `paused: false`, and `pausedAt`, `pausedUntil` and
@@ -169,7 +169,7 @@ row 7).
   - **clientName**: comes from `row.client.name`;
   - **lastExchange**: `null` when missing; otherwise the message and reply are passed through
     (already cut to 200 characters by SQL) with `answered`.
-- [ ] T014 [P] [US1] Extend src/conversations/conversations.service.spec.ts (mock
+- [X] T014 [P] [US1] Extend src/conversations/conversations.service.spec.ts (mock
   `IConversationsRepository`):
   - **`findAll`**: the ADMIN `clientId` filter is passed through; a CLIENT user is scoped to their
     own `clientId`. It calls `repo.lastExchanges(pageIds)` once per page and maps the rows with
@@ -177,7 +177,7 @@ row 7).
   - **`findOne`**: returns the mapped record; a missing chat or another client's chat →
     `NotFoundException`.
   - **`findMessages`**: unchanged scoping; items include `answered`.
-- [ ] T015 [P] [US1] Create src/conversations/conversations.controller.spec.ts:
+- [X] T015 [P] [US1] Create src/conversations/conversations.controller.spec.ts:
   - `findAll`, `findOne` and `findMessages` delegate with `@CurrentUser`;
   - class-level `ROLES` metadata is `['ADMIN','CLIENT']` (read with `Reflector`, as in
     src/clients/clients.controller.spec.ts).
@@ -197,21 +197,21 @@ row 7).
 
 ### Implementation for User Story 1
 
-- [ ] T017 [P] [US1] Create src/conversations/types/chat.types.ts:
+- [X] T017 [P] [US1] Create src/conversations/types/chat.types.ts:
   - `LastExchange { message; reply; answered; createdAt }`;
   - `ChatRecord` (data-model §8);
   - `ChatRowWithClient = Prisma.ChatGetPayload<{ include: { client: { select: { id: true; name:
     true } } } }>`.
-- [ ] T018 [P] [US1] In src/conversations/schemas/chat.schema.ts:
+- [X] T018 [P] [US1] In src/conversations/schemas/chat.schema.ts:
   - extend `QueryChatSchema` with `paused: z.enum(['true','false']).transform(v => v ===
     'true').optional()`;
   - add the response schemas `ChatRecordSchema`, `ChatPageSchema` (contract `ChatRecord`,
     `ChatPage`) and the DTOs `ChatRecordDto`, `ChatPageDto`.
-- [ ] T019 [P] [US1] In src/conversations/schemas/message-reply.schema.ts add the response schemas
+- [X] T019 [P] [US1] In src/conversations/schemas/message-reply.schema.ts add the response schemas
   `ExchangeRecordSchema` (with `answered`), `ExchangePageSchema` and the DTO `ExchangePageDto`.
-- [ ] T020 [US1] Create src/conversations/mappers/chat.mapper.ts with `isEffectivelyPaused(chat,
+- [X] T020 [US1] Create src/conversations/mappers/chat.mapper.ts with `isEffectivelyPaused(chat,
   now)` (R5 rule) and `toChatRecord(...)`, to pass T013.
-- [ ] T021 [US1] Repository changes in src/conversations/repositories/IConversationsRepository.repository.ts
+- [X] T021 [US1] Repository changes in src/conversations/repositories/IConversationsRepository.repository.ts
   and conversations.repository.impl.ts:
   - **`findAll`**: adds `include: { client: { select: { id, name } } }`. When `paused` is set, the
     where clause adds the effective-pause condition (`pausedAt not null AND (pausedUntil null OR
@@ -223,11 +223,11 @@ row 7).
     ANY(${ids}::uuid[]) ORDER BY chat_id, created_at DESC, id DESC`. It returns an empty map for
     an empty list and does no query (R7).
   - **`findMessages`**: returns `answered`.
-- [ ] T022 [US1] In src/conversations/conversations.service.ts:
+- [X] T022 [US1] In src/conversations/conversations.service.ts:
   - `findAll` and `findMessages` return mapped records (T020, T021);
   - add `findOne(chatId, user)`, which throws `NotFoundException('Conversation not found')`;
   - pass `isAdmin = user.roles.includes('ADMIN')` to the mapper.
-- [ ] T023 [US1] In src/conversations/conversations.controller.ts:
+- [X] T023 [US1] In src/conversations/conversations.controller.ts:
   - add `@Get(':chatId')` (`ChatIdParamDto`, `@ApiOkResponse({ type: ChatRecordDto })`);
   - set the response types `ChatPageDto` and `ExchangePageDto` on the existing routes.
 
@@ -289,10 +289,10 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
 
 ### Tests for User Story 2 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T031 [P] [US2] Extend src/conversations/schemas/reply-schemas.spec.ts:
+- [X] T031 [P] [US2] Extend src/conversations/schemas/reply-schemas.spec.ts:
   - `PauseChatSchema` accepts only `until_resumed|1h|24h|7d` and rejects extra keys;
   - `CreateUnansweredMessageSchema` requires `chatId` and a non-empty `message`, and strips NUL.
-- [ ] T032 [P] [US2] Extend src/conversations/conversations.service.spec.ts:
+- [X] T032 [P] [US2] Extend src/conversations/conversations.service.spec.ts:
   - **`pause`**:
     - each duration's `until`: `null`, now + 1 h, + 24 h, + 7 d (use jest fake timers for `now`);
     - pausing an already paused chat replaces `until` and writes a new event;
@@ -303,16 +303,16 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
   - **`isPaused(chat)`**: delegates to `isEffectivelyPaused`.
   - **`createUnansweredMessage`**: parses with the schema.
   - **`releaseExpiredPauses`**: returns the repository count.
-- [ ] T033 [P] [US2] Create src/conversations/chat-pause.sweeper.spec.ts:
+- [X] T033 [P] [US2] Create src/conversations/chat-pause.sweeper.spec.ts:
   - `onModuleInit` starts an interval from `PAUSE_SWEEP_INTERVAL_MS` (default 30000);
   - each tick calls `conversations.releaseExpiredPauses()`;
   - an error is caught and logged with `error`, and the next tick still runs;
   - `onModuleDestroy` clears the interval.
-- [ ] T034 [P] [US2] Extend src/conversations/conversations.controller.spec.ts:
+- [X] T034 [P] [US2] Extend src/conversations/conversations.controller.spec.ts:
   - `pause` passes `chatId`, the parsed body and the actor; `resume` passes `chatId` and the
     actor;
   - both have method-level `ROLES` metadata `['ADMIN']`.
-- [ ] T035 [P] [US2] Extend src/inbox/priority-inbox.service.spec.ts with the pause paths (R2
+- [X] T035 [P] [US2] Extend src/inbox/priority-inbox.service.spec.ts with the pause paths (R2
   checkpoints 1–2, R6, R16). Mock `ConversationsService.findOrCreate` to return a chat, and `isPaused`.
   - **Message, paused**: `createUnansweredMessage` with the text; attachments stored as `[image]`
     and `[voice message]` with **no** call to `AttachmentHandlerService`; no `dmBuffer.add`.
@@ -323,7 +323,7 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
     open).
   - **Recording error**: `createUnansweredMessage` throws → logged with `error`, and nothing is
     thrown out of `handle` (FR-025).
-- [ ] T036 [P] [US2] Extend src/inbox/message-sender.service.spec.ts:
+- [X] T036 [P] [US2] Extend src/inbox/message-sender.service.spec.ts:
   - **Paused** (`conversations.isPaused` true after a fresh `findOrCreate`): no `graph.post`;
     `createUnansweredMessage` with the batch text; nothing recorded as answered.
   - **Not paused**: unchanged.
@@ -352,15 +352,15 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
 
 ### Implementation for User Story 2
 
-- [ ] T038 [P] [US2] Add pause types and schemas:
+- [X] T038 [P] [US2] Add pause types and schemas:
   - in src/conversations/types/chat.types.ts: `PauseDuration = 'until_resumed'|'1h'|'24h'|'7d'`
     and `PAUSE_DURATION_MS` (`until_resumed` → null);
   - in src/conversations/schemas/chat.schema.ts: `PauseChatSchema = z.strictObject({ duration:
     z.enum([...]) })`, `PauseChatDto` and `PauseChatInput`.
-- [ ] T039 [P] [US2] In src/conversations/schemas/message-reply.schema.ts add
+- [X] T039 [P] [US2] In src/conversations/schemas/message-reply.schema.ts add
   `CreateUnansweredMessageSchema = z.strictObject({ chatId: z.uuid(), message:
   storableText(MAX_MESSAGE_LENGTH) })` and its type.
-- [ ] T040 [US2] Repository additions in IConversationsRepository.repository.ts and
+- [X] T040 [US2] Repository additions in IConversationsRepository.repository.ts and
   conversations.repository.impl.ts:
   - **`pause(chatId, until, duration, actor)`**: in one `$transaction`, updates the four pause
     columns and creates a `ChatPauseEvent { action: PAUSED, duration, until, actorId, actorName }`.
@@ -374,16 +374,16 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
     count (R5).
   - **`createUnansweredMessage({chatId, message})`**: creates a `MessageReply` with `reply: ''`
     and `answered: false`.
-- [ ] T041 [US2] In src/conversations/conversations.service.ts add `pause(chatId, input, actor)`
+- [X] T041 [US2] In src/conversations/conversations.service.ts add `pause(chatId, input, actor)`
   (scoped `findById`, then `until` from `PAUSE_DURATION_MS`), `resume(chatId, actor)` (no-op when
   not effectively paused), `isPaused(chat)`, `createUnansweredMessage(input)` and
   `releaseExpiredPauses()`, to pass T032. Log pause and resume at `log` with IDs only.
-- [ ] T042 [US2] Create src/conversations/chat-pause.sweeper.ts (`OnModuleInit`/`OnModuleDestroy`,
+- [X] T042 [US2] Create src/conversations/chat-pause.sweeper.ts (`OnModuleInit`/`OnModuleDestroy`,
   `ConfigService`, `Logger`), to pass T033. Register it in src/conversations/conversations.module.ts.
-- [ ] T043 [US2] In src/conversations/conversations.controller.ts add `@Post(':chatId/pause')` and
+- [X] T043 [US2] In src/conversations/conversations.controller.ts add `@Post(':chatId/pause')` and
   `@Post(':chatId/resume')`. Both use `@HttpCode(200)` and `@Roles('ADMIN')` at method level, and
   get the actor from `@CurrentUser()` (`{ id, name, email }`). Response type `ChatRecordDto`.
-- [ ] T044 [US2] In src/inbox/priority-inbox.service.ts, implement the pause half of checkpoints 1
+- [X] T044 [US2] In src/inbox/priority-inbox.service.ts, implement the pause half of checkpoints 1
   and 2 (R2, R6, R16), to pass T035:
   - **`message`**: after `findOrCreate` (keep it inside its try/catch), if
     `conversations.isPaused(chat)` → store each text and each attachment placeholder as an
@@ -391,7 +391,7 @@ an automatic `RESUMED` event (quickstart §3 rows 8–10).
   - **`batch`**: find the chat (same keys) and, if paused, store the joined text as one unanswered
     exchange and skip `delivery.send`.
   - On a chat read error: `warn` and continue as not paused.
-- [ ] T045 [US2] In src/inbox/message-sender.service.ts implement checkpoint 4, to pass T036. Before
+- [X] T045 [US2] In src/inbox/message-sender.service.ts implement checkpoint 4, to pass T036. Before
   the Graph loop, `findOrCreate` the chat and check `isPaused`. When paused, store the batch as
   unanswered and return without sending. Reuse the chat for the existing recording step. Also
   delete the line `this.logger.log(req.client)`: it logs the whole client data at `log` level on
@@ -435,17 +435,17 @@ rows with `clientName`, and `meta.total` matches. The dashboard `/comments` show
 
 ### Tests for User Story 3 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T051 [P] [US3] Create src/comments/schemas/comment-reply.schema.spec.ts:
+- [X] T051 [P] [US3] Create src/comments/schemas/comment-reply.schema.spec.ts:
   - `QueryCommentReplySchema` accepts `decisionBasis=ai_model` (→ `AI_MODEL`) and rejects
     `decisionBasis=x`;
   - `to` before `from` → an issue on `to`;
   - unknown keys are rejected;
   - add tests for the existing `SaveCommentReplySchema`: an empty comment is allowed, and
     `classification: 'inquiry'` → `INQUIRY`.
-- [ ] T052 [P] [US3] Create src/comments/mappers/comment.mapper.spec.ts: `toCommentRecord(row)`
+- [X] T052 [P] [US3] Create src/comments/mappers/comment.mapper.spec.ts: `toCommentRecord(row)`
   copies every field, sets `clientName` from `row.client.name`, and keeps `decisionBasis` and
   `decisionModel` (`null` → `null`).
-- [ ] T053 [P] [US3] Extend src/comments/comments.service.spec.ts:
+- [X] T053 [P] [US3] Extend src/comments/comments.service.spec.ts:
   - `findAll` maps the rows with `toCommentRecord`;
   - the ADMIN `clientId` is passed through and a CLIENT user is scoped;
   - `decisionBasis` is passed to the repository.
@@ -462,18 +462,18 @@ rows with `clientName`, and `meta.total` matches. The dashboard `/comments` show
 
 ### Implementation for User Story 3
 
-- [ ] T055 [P] [US3] Create src/comments/types/comment.types.ts with `CommentRecord` (contract
+- [X] T055 [P] [US3] Create src/comments/types/comment.types.ts with `CommentRecord` (contract
   `CommentRecord`) and `CommentRowWithClient`.
-- [ ] T056 [P] [US3] In src/comments/schemas/comment-reply.schema.ts:
+- [X] T056 [P] [US3] In src/comments/schemas/comment-reply.schema.ts:
   - extend `QueryCommentReplySchema` with `decisionBasis: decisionBasisField.optional()`;
   - add the response schemas `CommentRecordSchema`, `CommentPageSchema` and `CommentPageDto`.
-- [ ] T057 [US3] Create src/comments/mappers/comment.mapper.ts (`toCommentRecord`), to pass T052.
-- [ ] T058 [US3] In src/comments/repositories/ICommentsRepository.repository.ts and
+- [X] T057 [US3] Create src/comments/mappers/comment.mapper.ts (`toCommentRecord`), to pass T052.
+- [X] T058 [US3] In src/comments/repositories/ICommentsRepository.repository.ts and
   comments.repository.impl.ts, `findAll` now:
   - adds the `decisionBasis` where clause;
   - includes `client: { select: { name: true } }`;
   - returns mapped `CommentRecord`s, with order `[{ createdAt: dir }, { id: 'asc' }]` as today.
-- [ ] T059 [US3] Update src/comments/comments.service.ts (`findAll` returns
+- [X] T059 [US3] Update src/comments/comments.service.ts (`findAll` returns
   `PaginatedResult<CommentRecord>`) and src/comments/comments.controller.ts
   (`@ApiOkResponse({ type: CommentPageDto })`). Run `npm run openapi:export`.
 
@@ -514,18 +514,18 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
 
 ### Tests for User Story 4 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T065 [P] [US4] Extend src/inbox/comment-llm-classifier.service.spec.ts:
+- [X] T065 [P] [US4] Extend src/inbox/comment-llm-classifier.service.spec.ts:
   - a successful label returns `model` equal to the model that answered: the primary, or the
     fallback when the primary failed;
   - failures return no `model`.
-- [ ] T066 [P] [US4] Extend src/inbox/priority-inbox.service.spec.ts, comment branch (R8):
+- [X] T066 [P] [US4] Extend src/inbox/priority-inbox.service.spec.ts, comment branch (R8):
   - the rules decide → `comments.save` receives `decisionBasis: 'RULES', decisionModel: null`;
   - rules `unsure` and the LLM labels → `AI_MODEL` and the model;
   - the LLM fails with retries used up → `SPAM`, `SAFE_FALLBACK`, and a reason ending in
     `, fallback to spam`;
   - `comments.save` throws → `error` is logged and `commentReply.handle` is still called (FR-025,
     SC-010).
-- [ ] T067 [P] [US4] Create src/comments/comment-export.csv.spec.ts for `csvHeader()`, `csvRow(record)`
+- [X] T067 [P] [US4] Create src/comments/comment-export.csv.spec.ts for `csvHeader()`, `csvRow(record)`
   and `BOM` (R9):
   - quoting of commas, quotes (`"` → `""`) and CR/LF;
   - Arabic and emoji unchanged;
@@ -533,12 +533,12 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
     and `-5` in a reason also gets it;
   - `null` → an empty cell; dates as ISO; CRLF line ends;
   - the column order exactly as the contract.
-- [ ] T068 [P] [US4] Extend src/comments/schemas/comment-reply.schema.spec.ts:
+- [X] T068 [P] [US4] Extend src/comments/schemas/comment-reply.schema.spec.ts:
   - `SaveCommentReplySchema` and `ReclassifyCommentSchema` accept `decisionBasis` and
     `decisionModel` (≤ 100);
   - `ExportCommentsQuerySchema` accepts the list filters, rejects `page` and `limit` (strict), and
     has the same `to`/`from` rule.
-- [ ] T069 [P] [US4] Extend src/comments/comments.service.spec.ts:
+- [X] T069 [P] [US4] Extend src/comments/comments.service.spec.ts:
   - **`save`** passes the basis fields;
   - **`export(query, actor)`**:
     - calls `repo.startExport` with the filters and `snapshotAt` before reading;
@@ -548,7 +548,7 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
   - **abort**: if the consumer stops early (`return()` on the iterator) or the repository throws,
     `finishExport(id, rowsSoFar, false)` is called and the error is rethrown;
   - **filename**: `comments-<yyyymmdd-hhmmss>.csv`.
-- [ ] T070 [P] [US4] Create src/comments/comments.controller.spec.ts:
+- [X] T070 [P] [US4] Create src/comments/comments.controller.spec.ts:
   - `findAll` delegates;
   - `export` has `ROLES` `['ADMIN']` at method level and returns a `StreamableFile` with type
     `text/csv; charset=utf-8`, `Content-Disposition` with the filename, and `Cache-Control:
@@ -572,17 +572,17 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
 
 ### Implementation for User Story 4
 
-- [ ] T072 [P] [US4] Record the model with the label:
+- [X] T072 [P] [US4] Record the model with the label:
   - in src/inbox/comment-classifier.service.ts add `model?: string` to `Classification`;
   - in src/inbox/comment-llm-classifier.service.ts return `{ type, reason: \`llm ${model}\`, model
     }` on success.
-- [ ] T073 [P] [US4] In src/comments/schemas/comment-reply.schema.ts:
+- [X] T073 [P] [US4] In src/comments/schemas/comment-reply.schema.ts:
   - add `decisionBasis` (`z.enum` of the database values, default `UNKNOWN`) and `decisionModel`
     (`z.string().trim().max(100).nullish()`) to `SaveCommentReplySchema`, and include them in
     `ReclassifyCommentSchema`'s pick;
   - add `ExportCommentsQuerySchema` (the filters only, `strictObject`, range refine) and
     `ExportCommentsQueryDto`.
-- [ ] T074 [US4] In src/comments/repositories/* (interface and impl):
+- [X] T074 [US4] In src/comments/repositories/* (interface and impl):
   - **`save`**: the upsert's `update` branch also sets `decisionBasis` and `decisionModel`.
   - **`iterateForExport(filters, snapshotAt, batch)`**: an `AsyncGenerator<CommentRecord>`. It
     reads keyset pages ordered `createdAt desc, id asc`, using `(createdAt < last.createdAt) OR
@@ -590,12 +590,12 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
     client name.
   - **`startExport({actor, filters}) → id`**.
   - **`finishExport(id, rowCount, completed)`**.
-- [ ] T075 [US4] In src/inbox/priority-inbox.service.ts, comment branch: work out `decisionBasis`
+- [X] T075 [US4] In src/inbox/priority-inbox.service.ts, comment branch: work out `decisionBasis`
   and `decisionModel` as in data-model §5 and pass them to `comments.save`, keeping the existing
   catch-and-log (to pass T066).
-- [ ] T076 [P] [US4] Create src/comments/comment-export.csv.ts (`BOM`, `CSV_COLUMNS`, `csvHeader`,
+- [X] T076 [P] [US4] Create src/comments/comment-export.csv.ts (`BOM`, `CSV_COLUMNS`, `csvHeader`,
   `csvRow`, `neutralise`), pure functions to pass T067.
-- [ ] T077 [US4] In src/comments/comments.service.ts add `export(query, actor): Promise<{ filename;
+- [X] T077 [US4] In src/comments/comments.service.ts add `export(query, actor): Promise<{ filename;
   stream: Readable }>`:
   - it applies the CLIENT scoping helper (the route is ADMIN-only anyway);
   - sets `snapshotAt = new Date()`;
@@ -605,7 +605,7 @@ total, and a `comment_export_records` row says `completed = true` (quickstart §
 
   It reads `COMMENT_EXPORT_BATCH` through `ConfigService` (default 1000). Add `ConfigService` to
   the constructor and to the module if needed.
-- [ ] T078 [US4] In src/comments/comments.controller.ts add `@Get('export')`, declared **before** any
+- [X] T078 [US4] In src/comments/comments.controller.ts add `@Get('export')`, declared **before** any
   parameterised route:
   - `@Roles('ADMIN')`, `ExportCommentsQueryDto`, `@CurrentUser`;
   - `@Header('Cache-Control','no-store')`;
@@ -654,7 +654,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
 
 ### Tests for User Story 5 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T082 [P] [US5] Extend src/clients/schemas/client.schema.spec.ts:
+- [X] T082 [P] [US5] Extend src/clients/schemas/client.schema.spec.ts:
   - **Endpoint**: `chatWorkflowEndpoint` accepts `chat-acme`, `A_1` and 100 characters. It rejects
     the 20 values of SC-016: `https://evil.test/x`, `//evil`, `a/b`, `..`, `.`, `a b`, `a?b`,
     `a#b`, `a%2Fb`, `a@b`, `a:b`, `a\b`, `a.b`, `''`, `' '`, 101 characters, `ñ`, `a\nb`, `a;b`,
@@ -662,9 +662,9 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - **Create**: `chatSubscribed: true` without an endpoint → an issue on `chatWorkflowEndpoint`;
     the default is `false`.
   - **Update**: accepts `chatWorkflowEndpoint: null`.
-- [ ] T083 [P] [US5] Create src/clients/schemas/query-client.schema.spec.ts: `chatSubscribed=false`
+- [X] T083 [P] [US5] Create src/clients/schemas/query-client.schema.spec.ts: `chatSubscribed=false`
   → `false`, `true` → `true`, `maybe` → an error; existing `search` behavior unchanged.
-- [ ] T084 [P] [US5] Create src/inbox/chat-workflow-url.spec.ts for `buildWorkflowUrl(base,
+- [X] T084 [P] [US5] Create src/inbox/chat-workflow-url.spec.ts for `buildWorkflowUrl(base,
   endpoint)`:
   - `http://h/webhook/` + `chat-acme` → `http://h/webhook/chat-acme`; a base without a trailing
     slash gets one;
@@ -672,7 +672,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - it throws when the result's origin differs from the base's (simulate with a crafted endpoint
     that bypasses the regex);
   - it throws on a base with a query or fragment, or a non-http(s) base.
-- [ ] T085 [P] [US5] Extend src/clients/clients.service.spec.ts:
+- [X] T085 [P] [US5] Extend src/clients/clients.service.spec.ts:
   - **Create**: an endpoint taken by another client → 409 `DUPLICATE_KEY_ERROR` with
     `details.field = 'chatWorkflowEndpoint'`.
   - **Update rules**: `chatSubscribed: true` on a client without an endpoint → 422
@@ -681,7 +681,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
     OK. The merge uses the current record from `repo.findById`.
   - **Update conflict**: an endpoint taken → 409 (excluding the client itself).
   - **Lookups**: `findChatRoute` and `findChatRouteById` delegate to the repository.
-- [ ] T086 [P] [US5] Create src/clients/repositories/clients.repository.impl.spec.ts (mock
+- [X] T086 [P] [US5] Create src/clients/repositories/clients.repository.impl.spec.ts (mock
   `PrismaService` and the Redis client) for R1 and R16:
   - **`findChatRoute`**: reads Prisma first and writes `client:account:{id}` with a 30-min TTL. On
     a Prisma error it returns the cached copy with a `warn`. With no cache and a Prisma error it
@@ -689,7 +689,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - **`findWorkflowDataFresh`**: the same rule with `client:workflow:{id}`.
   - **`findChatRouteById`**: reads Prisma by ID.
   - **`findAll`**: filters by `chatSubscribed` when given.
-- [ ] T087 [P] [US5] Create src/inbox/n8n-delivery.service.spec.ts (mock Redis, `ConfigService`,
+- [X] T087 [P] [US5] Create src/inbox/n8n-delivery.service.spec.ts (mock Redis, `ConfigService`,
   `ClientsService`, and `global.fetch`):
   - **Construction**: an invalid `N8N_BASE_URL` → throws; missing in production → throws; missing
     outside production → `warn`.
@@ -701,7 +701,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - **Resend**: `onExpire` resend uses the endpoint current at that moment (change the mock
     between attempts).
   - **Unchanged**: `send`, `ack` and `take` behave as before.
-- [ ] T088 [P] [US5] Extend src/inbox/priority-inbox.service.spec.ts with the subscription half of
+- [X] T088 [P] [US5] Extend src/inbox/priority-inbox.service.spec.ts with the subscription half of
   checkpoints 1–2:
   - **Message**:
     - `findChatRoute` null or not subscribed → a `warn` with IDs only (assert the text is
@@ -744,7 +744,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
 
 ### Implementation for User Story 5
 
-- [ ] T091 [P] [US5] Client schemas:
+- [X] T091 [P] [US5] Client schemas:
   - in src/clients/schemas/client.schema.ts add `chatWorkflowEndpoint:
     z.string().trim().regex(/^[A-Za-z0-9_-]{1,100}$/, 'Use letters, digits, - and _ only (max
     100)').nullish()` and `chatSubscribed: z.boolean().optional()` to `CreateClientSchema`, plus a
@@ -753,10 +753,10 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - in src/clients/schemas/client-record.schema.ts add both fields;
   - in src/clients/schemas/query-client.schema.ts add `chatSubscribed: z.enum(['true','false'])
     .transform(v => v === 'true').optional()`.
-- [ ] T092 [P] [US5] In src/clients/types/client.types.ts add `ChatRoute { clientId; name;
+- [X] T092 [P] [US5] In src/clients/types/client.types.ts add `ChatRoute { clientId; name;
   chatSubscribed; chatWorkflowEndpoint: string | null }`.
-- [ ] T093 [P] [US5] Create src/inbox/chat-workflow-url.ts (`buildWorkflowUrl`), to pass T084.
-- [ ] T094 [US5] In src/clients/repositories/IClientsRepository.repository.ts and
+- [X] T093 [P] [US5] Create src/inbox/chat-workflow-url.ts (`buildWorkflowUrl`), to pass T084.
+- [X] T094 [US5] In src/clients/repositories/IClientsRepository.repository.ts and
   clients.repository.impl.ts add:
   - `findChatRoute(accountId)` and `findWorkflowDataFresh(accountId)`: database first, then
     refresh the cache; on error, the cached copy or `null` (R16);
@@ -765,7 +765,7 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
   - the `chatSubscribed` filter in `findAll`.
 
   Keep `findByAccountId` and `getClientDataForWorkFlow` unchanged for the comment path.
-- [ ] T095 [US5] In src/clients/clients.service.ts:
+- [X] T095 [US5] In src/clients/clients.service.ts:
   - **`create`**: add `assertEndpointFree` (409 `DUPLICATE_KEY_ERROR`, field
     `chatWorkflowEndpoint`).
   - **`update`**: reads the current record, merges `chatSubscribed` and `chatWorkflowEndpoint`,
@@ -774,13 +774,13 @@ together with its dashboard tasks (T098–T103), following quickstart §6.
     [...] } } })` when the merged state is subscribed without an endpoint. Then the endpoint
     conflict check, then the existing version compare-and-swap.
   - Add `findChatRoute`, `findChatRouteById` and `findWorkflowDataFresh`.
-- [ ] T096 [US5] In src/inbox/n8n-delivery.service.ts, to pass T087:
+- [X] T096 [US5] In src/inbox/n8n-delivery.service.ts, to pass T087:
   - inject `ClientsService` with `@Inject(forwardRef(() => ClientsService))`;
   - validate `N8N_BASE_URL` in the constructor;
   - in `post`, resolve the route by ID, take the terminal dead-letter path when it is not
     deliverable, and otherwise build the URL with `buildWorkflowUrl`;
   - remove every read of `N8N_WEBHOOK_URL`.
-- [ ] T097 [US5] In src/inbox/priority-inbox.service.ts add the subscription half of checkpoints 1
+- [X] T097 [US5] In src/inbox/priority-inbox.service.ts add the subscription half of checkpoints 1
   and 2, and switch the batch payload to `findWorkflowDataFresh` (to pass T088). Replace the
   `findByAccountId` call in the message branch with `findChatRoute`, and log drops as
   `Dropped DM ${item.id} for ${item.accountId}: chat service not subscribed`.
@@ -832,26 +832,26 @@ edit all three (quickstart §3 rows 14–16).
 
 ### Tests for User Story 6 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T104 [P] [US6] Extend src/services/services.service.spec.ts (mock `IServicesRepository` and
+- [X] T104 [P] [US6] Extend src/services/services.service.spec.ts (mock `IServicesRepository` and
   `OffersService`):
   - **Create**: an `offerId` of another client → `UnprocessableEntityException` with
     `fieldErrors.offerId`; an unknown `offerId` (`OffersService.findById` throws 404) → the same
     422; `offerId: null` → OK.
   - **Update**: a different `clientId` → 422 on `clientId`; the same `clientId` → OK; the offer
     check uses the stored `clientId`.
-- [ ] T105 [P] [US6] Extend src/offers/offers.service.spec.ts: an update with a different `clientId`
+- [X] T105 [P] [US6] Extend src/offers/offers.service.spec.ts: an update with a different `clientId`
   → 422 on `clientId`; the same value → OK; a missing offer → `NotFoundException`.
-- [ ] T106 [P] [US6] Extend src/business-info/business-info.service.spec.ts:
+- [X] T106 [P] [US6] Extend src/business-info/business-info.service.spec.ts:
   - `findByClientId` with no record → `NotFoundException`;
   - **`update`**: a body `clientId` different from the route's → 422; an omitted field is not sent
     to the repository; `null` clears a nullable field.
-- [ ] T107 [P] [US6] Update the controller specs for the new parameters, and check that each route
+- [X] T107 [P] [US6] Update the controller specs for the new parameters, and check that each route
   delegates with the parsed values:
   - src/services/services.controller.spec.ts and src/offers/offers.controller.spec.ts:
     `IdParamDto`;
   - src/business-info/business-info.controller.spec.ts: `ClientIdParamDto` and the update body
     DTO.
-- [ ] T108 [P] [US6] Schema tests:
+- [X] T108 [P] [US6] Schema tests:
   - create src/services/schemas/query-service.schema.spec.ts and
     src/offers/schemas/query-offer.schema.spec.ts: `clientId` is an optional UUID;
   - create src/business-info/schemas/business-info.schema.spec.ts: `UpdateBusinessInfoBodySchema`
@@ -870,24 +870,24 @@ edit all three (quickstart §3 rows 14–16).
 
 ### Implementation for User Story 6
 
-- [ ] T110 [P] [US6] Per-client lists:
+- [X] T110 [P] [US6] Per-client lists:
   - add `clientId: z.uuid().optional()` to src/services/schemas/query-service.schema.ts and
     src/offers/schemas/query-offer.schema.ts;
   - in src/services/repositories/services.repository.impl.ts and
     src/offers/repositories/offers.repository.impl.ts, filter by `clientId` and order with `[{
     [orderBy]: dir }, { id: 'asc' }]`.
-- [ ] T111 [US6] Service rules:
+- [X] T111 [US6] Service rules:
   - in src/services/services.module.ts import `OffersModule`;
   - in src/services/services.service.ts:
     - `create` checks the offer with `OffersService.findById` (`clientId` must match);
     - `update` loads the service (404 if missing), rejects a changed `clientId`, and checks a new
       `offerId` against the stored `clientId`;
     - both throw a 422 with the `fieldErrors` shape.
-- [ ] T112 [P] [US6] In src/offers/offers.service.ts `update` loads the offer (404 if missing) and
+- [X] T112 [P] [US6] In src/offers/offers.service.ts `update` loads the offer (404 if missing) and
   rejects a changed `clientId` with a 422 on `clientId`.
-- [ ] T113 [P] [US6] In src/services/services.controller.ts and src/offers/offers.controller.ts
+- [X] T113 [P] [US6] In src/services/services.controller.ts and src/offers/offers.controller.ts
   replace `@Param('id') id: string` with `@Param() { id }: IdParamDto` on every route.
-- [ ] T114 [US6] Business info:
+- [X] T114 [US6] Business info:
   - in src/business-info/schemas/business-info.schema.ts add `UpdateBusinessInfoBodySchema` (the
     partial fields plus `clientId: z.uuid().optional()`, refine "at least one field") and its DTO;
   - in src/business-info/business-info.controller.ts use `@Param() { clientId }: ClientIdParamDto`
@@ -942,7 +942,7 @@ edit all three (quickstart §3 rows 14–16).
 
 **Purpose**: Delete customer texts older than `RETENTION_MONTHS` once a day (R15).
 
-- [ ] T122 [P] Create src/retention/retention.service.spec.ts (mock `ConfigService`,
+- [X] T122 [P] Create src/retention/retention.service.spec.ts (mock `ConfigService`,
   `ConversationsService`, `CommentsService`; jest fake timers):
   - **Config**: a `RETENTION_MONTHS` of `0`, `-1` or `abc` → the constructor throws; the default is
     12.
@@ -952,7 +952,7 @@ edit all three (quickstart §3 rows 14–16).
   - **Log**: one `log` line with the three counts and no text.
   - **Errors**: an error → `error` log, and the next run still happens.
   - **Shutdown**: `onModuleDestroy` clears both timers.
-- [ ] T123 [P] Extend src/conversations/conversations.service.spec.ts and
+- [X] T123 [P] Extend src/conversations/conversations.service.spec.ts and
   src/comments/comments.service.spec.ts: `purgeBefore(cutoff)` delegates to the repository and
   returns its counts.
 - [ ] T124 [P] Create test/retention.e2e-spec.ts (SC-021). Seed through Prisma:
@@ -966,14 +966,14 @@ edit all three (quickstart §3 rows 14–16).
   - the active chat keeps only its 11-month exchange;
   - only the 11-month comment remains;
   - the export record remains.
-- [ ] T125 Add `purgeBefore(cutoff): Promise<{ chats; exchanges }>` to the
+- [X] T125 Add `purgeBefore(cutoff): Promise<{ chats; exchanges }>` to the
   src/conversations/repositories/* interface and implementation. It loops `$executeRaw` `DELETE
   FROM chats WHERE id IN (SELECT id FROM chats WHERE updated_at < ${cutoff} LIMIT 5000)` until it
   deletes 0 rows (the cascade removes children), then does the same for `message_replies` on
   `created_at`. Add `purgeBefore(cutoff): Promise<number>` to the src/comments/repositories/*
   interface and implementation for `comment_replies.created_at`. Expose both through
   `ConversationsService.purgeBefore` and `CommentsService.purgeBefore`.
-- [ ] T126 Create the retention module:
+- [X] T126 Create the retention module:
   - src/retention/retention.service.ts (`RetentionService`, `OnModuleInit`/`OnModuleDestroy`, a
     public `runOnce()`, to pass T122);
   - src/retention/retention.module.ts (imports `ConversationsModule` and `CommentsModule`);
@@ -1015,10 +1015,10 @@ edit all three (quickstart §3 rows 14–16).
 - [ ] T131 Run `npm run openapi:export` and commit openapi/openapi.json. Compare it with
   contracts/chat-flow-api.openapi.yaml: every path, operation and field listed in the contract
   exists with the same shape. Then run `npm run api:types` in fekra-dashboard and commit.
-- [ ] T132 Constitution VI: re-read the migration SQL. Confirm that the previous release's code
+- [X] T132 Constitution VI: re-read the migration SQL. Confirm that the previous release's code
   needs none of the new columns, and that its inserts work because every new `NOT NULL` column has
   a default. Note the result in the PR description, with the rollback path (quickstart §6).
-- [ ] T133 [P] Security pass (constitution IV, VIII):
+- [X] T133 [P] Security pass (constitution IV, VIII):
   - grep the new and changed code in src/inbox, src/conversations and src/comments for `logger.`
     calls that include `text`, `message`, `comment` or `reply` above `debug`, and fix any you find
     (FR-028, SC-012);
@@ -1040,7 +1040,7 @@ edit all three (quickstart §3 rows 14–16).
   - after the deploy, subscribe every client using the **Only not subscribed** filter, and send
     one test DM per client;
   - remove `N8N_WEBHOOK_URL` in a later change.
-- [ ] T138 [P] Fix the constitution IV and VIII follow-ups in src/inbox/n8n-callback.controller.ts,
+- [X] T138 [P] Fix the constitution IV and VIII follow-ups in src/inbox/n8n-callback.controller.ts,
   and create src/inbox/n8n-callback.controller.spec.ts:
   - read `N8N_WEBHOOK_SECRET` through `ConfigService` instead of `process.env`;
   - compare with `crypto.timingSafeEqual` on equal-length buffers; different lengths → 401 without

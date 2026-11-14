@@ -18,7 +18,19 @@ export const DmReplyConfigInputSchema = DmReplyConfigSchema.refine(
   },
 );
 
-export const CreateClientSchema = z.strictObject({
+// One path segment, added to N8N_BASE_URL. No slash, dot, space, @, ?, # or %, so nothing stored
+// here can change the host or add a query (FR-035).
+export const CHAT_ENDPOINT_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+export const chatWorkflowEndpoint = z
+  .string()
+  .trim()
+  .regex(
+    CHAT_ENDPOINT_PATTERN,
+    'Use letters, digits, - and _ only (up to 100 characters)',
+  );
+
+// Zod 4 cannot .partial() a refined object, so the fields live here and each schema adds its rules
+const ClientFields = z.strictObject({
   name: text(255),
   businessCategory: text(255),
   fbPageId: metaId.nullish(),
@@ -28,13 +40,28 @@ export const CreateClientSchema = z.strictObject({
   aiConfig: AiConfigSchema.optional(),
   dmReplyConfig: DmReplyConfigInputSchema.optional(),
   commentReplyConfig: CommentReplyConfigSchema.optional(),
+  chatWorkflowEndpoint: chatWorkflowEndpoint.nullish(),
+  chatSubscribed: z.boolean().optional(),
+});
+
+// Subscribing needs an endpoint. On an edit the service checks the merged state instead, because
+// the endpoint may already be stored.
+export const CreateClientSchema = ClientFields.superRefine((client, ctx) => {
+  if (client.chatSubscribed && !client.chatWorkflowEndpoint) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['chatWorkflowEndpoint'],
+      message:
+        'Enter an endpoint before subscribing the client to the chat service',
+    });
+  }
 });
 
 /**
  * Edits never carry the token (it has its own endpoint) and must say which version they
  * started from, so a stale save is refused instead of overwriting someone else's change.
  */
-export const UpdateClientSchema = CreateClientSchema.omit({ accessToken: true })
+export const UpdateClientSchema = ClientFields.omit({ accessToken: true })
   .partial()
   .extend({ version: z.number().int().min(1) });
 

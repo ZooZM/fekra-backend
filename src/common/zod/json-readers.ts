@@ -50,3 +50,8 @@ export const readReplyRunDetails = reader(
   S.ReplyRunActivityDetailsSchema.nullable(),
   null,
 );
+export const readExportFilters = reader(
+  'exportFilters',
+  S.ExportFiltersSchema,
+  { snapshotAt: '1970-01-01T00:00:00.000Z' },
+);

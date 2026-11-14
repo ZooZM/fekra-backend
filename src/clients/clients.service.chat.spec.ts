@@ -1,0 +1,207 @@
+import {
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { ClientsService } from './clients.service';
+
+const actor = { id: 'a1', name: 'Admin', email: 'admin@example.com' };
+
+describe('ClientsService chat service rules (feature 003)', () => {
+  let service: ClientsService;
+  let repo: Record<string, jest.Mock>;
+
+  const stored = (over: Record<string, unknown> = {}) => ({
+    id: 'c1',
+    name: 'Acme',
+    version: 4,
+    chatWorkflowEndpoint: null,
+    chatSubscribed: false,
+    ...over,
+  });
+
+  beforeEach(() => {
+    repo = Object.fromEntries(
+      [
+        'create',
+        'findById',
+        'update',
+        'findMetaAccountConflict',
+        'findChatEndpointConflict',
+        'findChatRoute',
+        'findChatRouteById',
+        'findWorkflowDataFresh',
+      ].map((name) => [name, jest.fn()]),
+    );
+    repo.findMetaAccountConflict.mockResolvedValue(null);
+    repo.findChatEndpointConflict.mockResolvedValue(false);
+    repo.update.mockResolvedValue({ status: 'updated', record: stored() });
+    service = new ClientsService(
+      {
+        encrypt: jest.fn((v: string) => `enc:${v}`),
+        decrypt: jest.fn(),
+      } as never,
+      repo as never,
+    );
+  });
+
+  const fieldError = async (promise: Promise<unknown>) => {
+    const error = (await promise.catch((e: unknown) => e)) as {
+      getResponse: () => {
+        errorCode: string;
+        details: { fieldErrors: Record<string, string[]> };
+      };
+    };
+    expect(error).toBeInstanceOf(UnprocessableEntityException);
+    return error.getResponse();
+  };
+
+  describe('create', () => {
+    it('answers 409 DUPLICATE_KEY_ERROR on the endpoint field when another client has it', async () => {
+      repo.findChatEndpointConflict.mockResolvedValue(true);
+
+      const error = (await service
+        .create(
+          {
+            name: 'A',
+            businessCategory: 'B',
+            accessToken: 't',
+            chatWorkflowEndpoint: 'chat-acme',
+          },
+          actor,
+        )
+        .catch((e: unknown) => e)) as ConflictException;
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: 'DUPLICATE_KEY_ERROR',
+        details: { field: 'chatWorkflowEndpoint' },
+      });
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
+    it('does not look for a conflict when no endpoint is given', async () => {
+      repo.create.mockResolvedValue({ id: 'new' });
+      await service.create(
+        { name: 'A', businessCategory: 'B', accessToken: 't' },
+        actor,
+      );
+      expect(repo.findChatEndpointConflict).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('does not read the client for edits that leave the chat fields alone', async () => {
+      await service.update('c1', { name: 'B', version: 4 }, actor);
+      expect(repo.findById).not.toHaveBeenCalled();
+      expect(repo.findChatEndpointConflict).not.toHaveBeenCalled();
+    });
+
+    it('refuses to subscribe a client that has no endpoint, with a field error', async () => {
+      repo.findById.mockResolvedValue(stored());
+
+      const body = await fieldError(
+        service.update('c1', { chatSubscribed: true, version: 4 }, actor),
+      );
+
+      expect(body.errorCode).toBe('INPUT_VALIDATION_ERROR');
+      expect(body.details.fieldErrors.chatWorkflowEndpoint).toHaveLength(1);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('subscribes a client that already has a stored endpoint', async () => {
+      repo.findById.mockResolvedValue(
+        stored({ chatWorkflowEndpoint: 'chat-acme' }),
+      );
+      await service.update('c1', { chatSubscribed: true, version: 4 }, actor);
+      expect(repo.update).toHaveBeenCalledWith(
+        'c1',
+        { chatSubscribed: true },
+        4,
+        actor,
+      );
+    });
+
+    it('accepts the endpoint and the subscription in the same edit', async () => {
+      repo.findById.mockResolvedValue(stored());
+      await service.update(
+        'c1',
+        { chatWorkflowEndpoint: 'chat-acme', chatSubscribed: true, version: 4 },
+        actor,
+      );
+      expect(repo.findChatEndpointConflict).toHaveBeenCalledWith(
+        'chat-acme',
+        'c1',
+      );
+      expect(repo.update).toHaveBeenCalled();
+    });
+
+    it('refuses to remove the endpoint of a subscribed client', async () => {
+      repo.findById.mockResolvedValue(
+        stored({ chatWorkflowEndpoint: 'chat-acme', chatSubscribed: true }),
+      );
+
+      const body = await fieldError(
+        service.update('c1', { chatWorkflowEndpoint: null, version: 4 }, actor),
+      );
+
+      expect(body.details.fieldErrors.chatWorkflowEndpoint[0]).toMatch(
+        /unsubscribe/i,
+      );
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('lets an unsubscribed client lose its endpoint, and unsubscribing keeps it', async () => {
+      repo.findById.mockResolvedValue(
+        stored({ chatWorkflowEndpoint: 'chat-acme', chatSubscribed: true }),
+      );
+      await service.update('c1', { chatSubscribed: false, version: 4 }, actor);
+      await service.update(
+        'c1',
+        { chatSubscribed: false, chatWorkflowEndpoint: null, version: 4 },
+        actor,
+      );
+      expect(repo.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('answers 409 when the endpoint belongs to another client, excluding the client itself', async () => {
+      repo.findById.mockResolvedValue(stored());
+      repo.findChatEndpointConflict.mockResolvedValue(true);
+
+      await expect(
+        service.update(
+          'c1',
+          { chatWorkflowEndpoint: 'taken', version: 4 },
+          actor,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(repo.findChatEndpointConflict).toHaveBeenCalledWith('taken', 'c1');
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 when the client does not exist', async () => {
+      repo.findById.mockResolvedValue(null);
+      await expect(
+        service.update('c9', { chatSubscribed: false, version: 1 }, actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('chat route reads', () => {
+    it('delegates the three fresh reads to the repository', async () => {
+      const route = { clientId: 'c1', chatSubscribed: true };
+      repo.findChatRoute.mockResolvedValue(route);
+      repo.findChatRouteById.mockResolvedValue(route);
+      repo.findWorkflowDataFresh.mockResolvedValue({ id: 'c1' });
+
+      await expect(service.findChatRoute('page-1')).resolves.toBe(route);
+      await expect(service.findChatRouteById('c1')).resolves.toBe(route);
+      await expect(service.findWorkflowDataFresh('page-1')).resolves.toEqual({
+        id: 'c1',
+      });
+      expect(repo.findChatRoute).toHaveBeenCalledWith('page-1');
+      expect(repo.findChatRouteById).toHaveBeenCalledWith('c1');
+      expect(repo.findWorkflowDataFresh).toHaveBeenCalledWith('page-1');
+    });
+  });
+});

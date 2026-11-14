@@ -15,6 +15,7 @@ import { QueryOfferDto } from './schemas/query-offer.schema';
 import { JwtAuthGuard } from '@app/auth/guards/jwt.guard';
 import { RolesGuard } from '@app/auth/guards/roles.guard';
 import { Roles } from '@app/auth/decorators/roles.decorator';
+import { IdParamDto } from '@common/zod/dtos';
 
 // ADMIN only until CLIENT users are scoped to their own clientId (constitution IV)
 @Controller('offers')
@@ -34,17 +35,17 @@ export class OffersController {
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
+  findById(@Param() { id }: IdParamDto) {
     return this.offersService.findById(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateOfferDto) {
+  update(@Param() { id }: IdParamDto, @Body() dto: UpdateOfferDto) {
     return this.offersService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param() { id }: IdParamDto) {
     return this.offersService.remove(id);
   }
 }

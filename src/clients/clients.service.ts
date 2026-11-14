@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   IClientsRepository,
@@ -12,6 +13,7 @@ import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { TokenCryptoService } from '@app/crypto/token-crypto.service';
 import { CreateClientInput, UpdateClientInput } from './schemas/client.schema';
 import {
+  ChatRoute,
   ClientActor,
   ClientRecord,
   ClientRef,
@@ -34,6 +36,7 @@ export class ClientsService {
     actor: ClientActor,
   ): Promise<ClientRecord> {
     await this.assertAccountsFree(input);
+    await this.assertEndpointFree(input.chatWorkflowEndpoint);
     const { accessToken, ...rest } = input;
     const id = randomUUID(); // generated first: it's the AAD for the encryption
     return this.repo.create(
@@ -63,6 +66,7 @@ export class ClientsService {
   ): Promise<ClientRecord> {
     const { version, ...data } = input;
     await this.assertAccountsFree(data, id);
+    await this.assertChatService(id, data);
     const result = await this.repo.update(id, data, version, actor);
     if (!result) throw new NotFoundException('Client not found');
     if (result.status === 'conflict') {
@@ -87,6 +91,21 @@ export class ClientsService {
     brandId: string,
   ): Promise<ClientWorkflowData | null> {
     return this.repo.getClientDataForWorkFlow(brandId);
+  }
+
+  /** The chat route by account id, read fresh (the cache is only an outage fallback). */
+  findChatRoute(accountId: string): Promise<ChatRoute | null> {
+    return this.repo.findChatRoute(accountId);
+  }
+
+  /** The chat route by client id, read fresh on every delivery attempt. */
+  findChatRouteById(clientId: string): Promise<ChatRoute | null> {
+    return this.repo.findChatRouteById(clientId);
+  }
+
+  /** Client, services, offers and business info for a DM batch, database first. */
+  findWorkflowDataFresh(accountId: string): Promise<ClientWorkflowData | null> {
+    return this.repo.findWorkflowDataFresh(accountId);
   }
 
   async setAccessToken(
@@ -119,6 +138,63 @@ export class ClientsService {
   async getAccessToken(clientId: string): Promise<string | null> {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
+  }
+
+  /** An endpoint belongs to one client only: its workflow is built for that client. */
+  private async assertEndpointFree(
+    endpoint: string | null | undefined,
+    excludeId?: string,
+  ): Promise<void> {
+    if (!endpoint) return;
+    if (await this.repo.findChatEndpointConflict(endpoint, excludeId)) {
+      throw new ConflictException({
+        message: 'Endpoint already used by another client',
+        errorCode: 'DUPLICATE_KEY_ERROR',
+        details: { field: 'chatWorkflowEndpoint' },
+      });
+    }
+  }
+
+  /**
+   * An edit may send only one of the two chat fields, so the rule "subscribed needs an endpoint"
+   * is checked on the merged state. The version check in the repository protects this
+   * read-merge-write: a concurrent edit changes the version and the save is refused.
+   */
+  private async assertChatService(
+    id: string,
+    data: { chatWorkflowEndpoint?: string | null; chatSubscribed?: boolean },
+  ): Promise<void> {
+    if (
+      data.chatWorkflowEndpoint === undefined &&
+      data.chatSubscribed === undefined
+    ) {
+      return;
+    }
+    const current = await this.repo.findById(id);
+    if (!current) throw new NotFoundException('Client not found');
+
+    const endpoint =
+      data.chatWorkflowEndpoint !== undefined
+        ? data.chatWorkflowEndpoint
+        : current.chatWorkflowEndpoint;
+    const subscribed = data.chatSubscribed ?? current.chatSubscribed;
+    if (subscribed && !endpoint) {
+      throw new UnprocessableEntityException({
+        message: 'Validation failed',
+        errorCode: 'INPUT_VALIDATION_ERROR',
+        details: {
+          formErrors: [],
+          fieldErrors: {
+            chatWorkflowEndpoint: [
+              data.chatWorkflowEndpoint === null
+                ? 'Unsubscribe the client before removing its endpoint'
+                : 'Enter an endpoint before subscribing the client to the chat service',
+            ],
+          },
+        },
+      });
+    }
+    await this.assertEndpointFree(data.chatWorkflowEndpoint, id);
   }
 
   /** A Facebook page / Instagram account can belong to one client only (webhooks match on it). */
