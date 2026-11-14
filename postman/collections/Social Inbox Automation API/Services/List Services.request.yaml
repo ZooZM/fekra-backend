@@ -2,7 +2,9 @@ $kind: http-request
 description: |-
   Lists services.
 
-  **Query:** `QueryServiceDto`
+  **Query:** `QueryServiceDto`: `page`, `limit`, `orderBy` (`name`, `price`, `createdAt`), `orderDir` and `clientId` (a UUID: lists only that client's services; the dashboard always sends it). Ties are ordered by id, so paging is stable.
+
+  `422` `INPUT_VALIDATION_ERROR` when `clientId` is not a UUID. A service created with, or moved to, an offer of another client is refused by **Create Service** and **Update Service** (`422` on `offerId`).
 url: "{{baseUrl}}/services?page=1&limit=20"
 method: GET
 queryParams:
@@ -16,8 +18,8 @@ queryParams:
     description: Page size
   - key: clientId
     value: "{{clientId}}"
-    disabled: true
-    description: Filter by client
+    disabled: false
+    description: Only this client's services
 scripts:
   - type: afterResponse
     code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));

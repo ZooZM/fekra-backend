@@ -23,7 +23,8 @@ export async function createE2eApp(): Promise<INestApplication> {
 
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "client_activities","offers","services","business_info","refresh_tokens","users","clients" RESTART IDENTITY CASCADE',
+    // chats, message_replies, comment_replies and chat_pause_events go with "clients" (foreign keys)
+    'TRUNCATE TABLE "client_activities","comment_export_records","offers","services","business_info","refresh_tokens","users","clients" RESTART IDENTITY CASCADE',
   );
 }
 

@@ -1,0 +1,6 @@
+$kind: collection
+description: |-
+  Classified comments: the list, and the CSV download for checking the classifier later.
+
+  Reading needs a JWT with the `ADMIN` or `CLIENT` role (a CLIENT user only sees their own client). The download is `ADMIN` only.
+order: 7700

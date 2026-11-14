@@ -1,0 +1,49 @@
+$kind: http-request
+description: |-
+  Lists conversations, most recent activity first. **Requires:** `ADMIN` or `CLIENT` role. A `CLIENT` user is always scoped to their own client; `clientId` only applies to `ADMIN`.
+
+  **Query:** `page`, `limit` (1-100), `orderBy` (`updatedAt`, `createdAt`), `orderDir`, `clientId` (ADMIN), `platform` (`facebook` or `instagram`), `senderId` (the customer identifier, **exact match** after trimming: the dashboard search box), `receiverId`, `paused` (`true` = only conversations whose assistant is paused now, `false` = only active ones).
+
+  **Each item** has `clientName`, `paused`, `pausedAt`, `pausedUntil`, `pausedBy` (`{ id, name }` for `ADMIN`, always `null` for `CLIENT`) and `lastExchange` (`{ message, reply, answered, createdAt }`, each text cut to 200 characters, `null` when there is no exchange yet).
+
+  A timed pause that has ended is not paused: `paused` is `false` and the pause fields are `null`.
+
+  Saves `{{chatId}}` from the first item.
+url: "{{baseUrl}}/chats?page=1&limit=20"
+method: GET
+queryParams:
+  - key: page
+    value: "1"
+    disabled: false
+    description: Page number
+  - key: limit
+    value: "20"
+    disabled: false
+    description: Page size
+  - key: platform
+    value: facebook
+    disabled: true
+    description: facebook or instagram
+  - key: senderId
+    value: "{{customerId}}"
+    disabled: true
+    description: Customer identifier, exact match
+  - key: paused
+    value: "true"
+    disabled: true
+    description: Only paused conversations (false = only active ones)
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const json = pm.response.json();
+      pm.test('Is a paginated list with the new fields', () => {
+        pm.expect(json).to.have.property('data');
+        pm.expect(json).to.have.property('meta');
+        if (json.data.length) {
+          ['clientName', 'paused', 'lastExchange'].forEach((k) => pm.expect(json.data[0]).to.have.property(k));
+        }
+      });
+      if (json.data && json.data.length) pm.collectionVariables.set('chatId', json.data[0].id);
+    language: text/javascript
+order: 1000

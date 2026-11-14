@@ -4,7 +4,9 @@ description: |-
 
   **Requires:** `ADMIN` role.
 
-  **Query:** `QueryClientDto`: `page`, `limit`, `orderBy` (`name`, `businessCategory`, `createdAt`), `orderDir`, and `search` (1 to 100 characters, matches name or category ignoring case; `%` and `_` are literal).
+  **Query:** `QueryClientDto`: `page`, `limit`, `orderBy` (`name`, `businessCategory`, `createdAt`), `orderDir`, `search` (1 to 100 characters, matches name or category ignoring case; `%` and `_` are literal), and `chatSubscribed` (`true` or `false`; `false` lists the clients that still need to be subscribed to the chat service, the checklist after the release).
+
+  Each client has `chatWorkflowEndpoint` and `chatSubscribed`.
 url: "{{baseUrl}}/clients?page=1&limit=20"
 method: GET
 queryParams:
@@ -20,6 +22,10 @@ queryParams:
     value: cafe
     disabled: true
     description: Matches business name or category, ignoring case (1-100 characters)
+  - key: chatSubscribed
+    value: "false"
+    disabled: true
+    description: false = only the clients that are not subscribed to the chat service
 scripts:
   - type: afterResponse
     code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));

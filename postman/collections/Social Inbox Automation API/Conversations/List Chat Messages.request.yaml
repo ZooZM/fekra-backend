@@ -1,0 +1,36 @@
+$kind: http-request
+description: |-
+  The exchanges of one conversation. **Requires:** `ADMIN` or `CLIENT` role (a `CLIENT` user only reaches their own client's conversations: `404` otherwise).
+
+  Newest first by default: send `orderDir=asc` to read the conversation from the top. The dashboard reads the newest 20 and loads earlier ones on request.
+
+  Each item has `message` (messages answered together are joined with a line break), `reply`, `answered` and `createdAt`. A message received while the assistant was paused has `answered: false` and an empty `reply`.
+url: "{{baseUrl}}/chats/:chatId/messages?page=1&limit=20&orderDir=desc"
+method: GET
+pathVariables:
+  chatId: "{{chatId}}"
+queryParams:
+  - key: page
+    value: "1"
+    disabled: false
+    description: Page number
+  - key: limit
+    value: "20"
+    disabled: false
+    description: Page size
+  - key: orderDir
+    value: desc
+    disabled: false
+    description: desc = newest first, asc = from the top
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 404]', () => pm.expect([200, 404]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        const json = pm.response.json();
+        pm.test('Every exchange says whether the assistant answered', () => {
+          json.data.forEach((e) => pm.expect(e).to.have.property('answered'));
+        });
+      }
+    language: text/javascript
+order: 3000

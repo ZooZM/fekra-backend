@@ -52,8 +52,8 @@ Main navigation (admin): Clients, Conversations, Comments. The client page shows
   what is on screen is what is stored. **Delete** asks for confirmation.
   - Fields: phone, WhatsApp (≤ 50), email, website (`http`/`https`), social links (rows of
     platform + URL, add/remove), location (city, district, full address, map links: URL +
-    description), work hours (rows of days + start + end; several rows for different hours on
-    different days), payment methods and installment options (tag inputs, no duplicates).
+    description), work hours (one row per weekday, `sunday` to `saturday`, with a start and an end time as `HH:MM`;
+    a weekday that is left out means closed, matching the API's per-day object), payment methods and installment options (tag inputs, no duplicates).
 - **Services** (`GET /services?clientId=…`): table with name, price, variants count and the
   offer's title; sort by name, price or date created; **Load more** by 20. The form has name
   (required), description, price (free text), variants (rows of name + price, names unique) and

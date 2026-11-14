@@ -2,7 +2,9 @@ $kind: http-request
 description: |-
   Lists offers.
 
-  **Query:** `QueryOfferDto`
+  **Query:** `QueryOfferDto`: `page`, `limit`, `orderBy` (`title`, `startDate`, `endDate`, `createdAt`), `orderDir` and `clientId` (a UUID: lists only that client's offers; the dashboard always sends it). Ties are ordered by id, so paging is stable.
+
+  `422` `INPUT_VALIDATION_ERROR` when `clientId` is not a UUID. **Update Offer** refuses a `clientId` that differs from the stored one (`422` on `clientId`); the same value is accepted. Deleting an offer keeps its services and clears their `offerId`.
 url: "{{baseUrl}}/offers?page=1&limit=20"
 method: GET
 queryParams:
@@ -16,8 +18,8 @@ queryParams:
     description: Page size
   - key: clientId
     value: "{{clientId}}"
-    disabled: true
-    description: Filter by client
+    disabled: false
+    description: Only this client's offers
 scripts:
   - type: afterResponse
     code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
