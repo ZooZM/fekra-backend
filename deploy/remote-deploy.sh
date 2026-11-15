@@ -3,6 +3,7 @@
 #
 #   remote-deploy.sh api <api-image> <migrate-image>
 #   remote-deploy.sh dashboard <dashboard-image>
+#   remote-deploy.sh preflight        # checks /opt/fekra/.env for the API; changes nothing
 #
 # Images are pinned by commit (name@sha256 or name:<full-sha>), never "latest".
 # The last good image of each service is remembered in /opt/fekra/RELEASE_<service>.
@@ -10,11 +11,68 @@
 # /opt/fekra/.env by the containers; this script never prints them.
 set -euo pipefail
 
-SERVICE="${1:?usage: remote-deploy.sh <api|dashboard> <image> [migrate-image]}"
-IMAGE="${2:?usage: remote-deploy.sh <api|dashboard> <image> [migrate-image]}"
+USAGE="usage: remote-deploy.sh <api|dashboard> <image> [migrate-image] | remote-deploy.sh preflight"
+SERVICE="${1:?$USAGE}"
+
+# FEKRA_ROOT exists only to try the script against a copy of the VM files; never set it on the VM.
+ROOT="${FEKRA_ROOT:-/opt/fekra}"
+ENV_FILE="$ROOT/.env"
+
+# Prints one variable's value from the env file without sourcing it: nothing in the file is run or
+# exported, and the caller only tests the value, never echoes it. Accepts "NAME=value",
+# "export NAME=value", spaces around "=" and quotes. The last assignment wins, as in compose.
+env_value() {
+  local name="$1" line value="" assign_re quoted_re
+  assign_re="^[[:space:]]*(export[[:space:]]+)?${name}[[:space:]]*=(.*)$"
+  quoted_re="^([\"'])(.*)[\"']$"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    if [[ "$line" =~ $assign_re ]]; then value="${BASH_REMATCH[2]}"; fi
+  done < "$ENV_FILE"
+  value="${value#"${value%%[![:space:]]*}"}" # trim the start
+  value="${value%"${value##*[![:space:]]}"}" # trim the end
+  if [[ "$value" =~ $quoted_re ]]; then value="${BASH_REMATCH[2]}"; fi
+  printf '%s' "$value"
+}
+
+# The API refuses to boot without N8N_BASE_URL (feature 003), and a failed boot only shows up after
+# the migration and the container swap. Check it first, so a missing value stops the deploy while
+# the running release keeps serving. Values are never printed.
+preflight() {
+  local base url_re='^https?://[^/?#[:space:]]+(/[^?#[:space:]]*)?$'
+  if [ ! -r "$ENV_FILE" ]; then
+    echo "Preflight failed: $ENV_FILE is missing or not readable by $(id -un). Nothing was changed." >&2
+    exit 1
+  fi
+  base="$(env_value N8N_BASE_URL)"
+  if [ -z "$base" ]; then
+    {
+      echo "Preflight failed: N8N_BASE_URL is missing or empty in $ENV_FILE."
+      echo "  The new API does not start without it. Add the base address of the n8n chat"
+      echo "  workflows, for example N8N_BASE_URL=https://n8n.example.com/webhook/"
+      echo "  (see 'Releasing 003' in specs/003-chat-frontend-comment-analysis/quickstart.md)."
+      echo "  Nothing was changed: the running release keeps serving."
+    } >&2
+    exit 1
+  fi
+  if [[ ! "$base" =~ $url_re ]]; then
+    {
+      echo "Preflight failed: N8N_BASE_URL in $ENV_FILE is not an http(s) address without a"
+      echo "  query or fragment (the value is not shown). Nothing was changed."
+    } >&2
+    exit 1
+  fi
+  echo "Preflight: N8N_BASE_URL is set in $ENV_FILE."
+}
+
+if [ "$SERVICE" = preflight ]; then
+  preflight
+  exit 0
+fi
+
+IMAGE="${2:?$USAGE}"
 MIGRATE_IMAGE="${3:-}"
 
-ROOT=/opt/fekra
 DEPLOY="$ROOT/deploy"
 COMPOSE="$DEPLOY/compose.yml"
 HEALTH_TIMEOUT=60
@@ -79,6 +137,8 @@ PREVIOUS="$(current "$SERVICE")"
 case "$SERVICE" in
   api)
     : "${MIGRATE_IMAGE:?pass the migrate image as the third argument}"
+    # before anything is pulled, migrated or replaced
+    preflight
     API_IMAGE_OVERRIDE="$IMAGE" dc pull api migrate
     # Migrations are additive (constitution), so the running API keeps working while they apply.
     # If they fail nothing has been replaced yet: stop here.

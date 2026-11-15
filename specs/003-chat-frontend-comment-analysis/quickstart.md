@@ -60,6 +60,7 @@ in the `Clients`, `Conversations`, `Comments`, `Services`, `Offers` and `Busines
 | 15 | `PUT /services/{{serviceId}}` with another client's `offerId` | 422 on `offerId` | US6-6, FR-039 |
 | 16 | `GET /business-info/client/{{newClientId}}` | 404 `NOT_FOUND` | US6-1 |
 | 17 | change a service price, then send a DM | the n8n payload shows the new price | US6-10, FR-048, SC-020 |
+| 18 | `n8n Data / Upsert Lead` twice, then `Get Lead Context` (feature 004) | created, then merged; `notifiedNow` `true` once, then `false`; the context shows the lead and the latest exchanges, oldest first | 004 FR-004 to FR-006 |
 
 ## 4. Database checks
 
@@ -121,28 +122,92 @@ UPDATE chats SET paused_until = now() - interval '1 minute' WHERE id = '<chatId>
 | SC-020 | e2e `chat-workflow`: change a price, next DM payload has the new price |
 | SC-021 | e2e `retention`: back-dated rows, one run |
 
-## 6. Release (hard cut, research R12)
+## 6. Releasing 003 (runbook)
 
-From the moment the backend is deployed, **no client gets automatic DM replies until it is
-subscribed** (FR-047). Do these in one window:
+Feature 004 (n8n lead endpoints, shared chat workflows, deploy preflight) is merged into 003 and
+ships in the same release. This release is a **hard cut** (FR-047, research R12): from the moment
+the new API runs, a client gets automatic DM replies only once it has an endpoint and is
+subscribed. Do every step below in one window.
 
-1. **Before**:
-   - Create one n8n workflow per client at `{N8N_BASE_URL}{endpoint}` and write down each
-     client's endpoint.
-   - Have the dashboard build for this feature ready to deploy.
-2. **Env file on the VM**: add `N8N_BASE_URL` (and optionally `PAUSE_SWEEP_INTERVAL_MS`,
-   `COMMENT_EXPORT_BATCH`, `RETENTION_MONTHS`). The first retention run, 1 minute after boot,
-   deletes anything already older than the period. With the default 12 months this is nothing
-   today: these tables only exist since 2026-11-09. **Keep `N8N_WEBHOOK_URL`** for rollback. Update the production secret
-   store in the same change.
-3. **Deploy the backend** (pipeline: migrate → start → `GET /health`).
-4. **Deploy the dashboard** right after. Until it is live, use the Postman request
-   `Clients / Update Client` to subscribe a client.
-5. **Subscribe every client**: on `/clients`, turn on **Only not subscribed**, then set the
-   endpoint and subscribe each client. Stop when the list is empty.
-6. **Verify**: one DM per client reaches its own workflow (Postman check 5, or n8n's execution
-   log).
-7. **Later**: remove `N8N_WEBHOOK_URL` from the env file once rollback is no longer needed.
+### Before the deploy
 
-**Rollback**: redeploy the previous SHA. It ignores the new columns and tables and sends every DM
-to `N8N_WEBHOOK_URL` again. The migration stays applied and needs no undo.
+1. **n8n workflows**. Every chat workflow must be **active** in n8n (a production webhook, not the
+   editor's test URL) and listen at `N8N_BASE_URL` + its endpoint, e.g.
+   `https://n8n.example.com/webhook/chat-shop`. One workflow per client, or one shared by several
+   clients (allowed since 004). Write down the endpoint of every client that should keep
+   chatting. Workflows that use the lead endpoints call `https://<api-host>/api/n8n/leads/context`
+   and `https://<api-host>/api/n8n/leads` with the header `x-webhook-secret: <N8N_WEBHOOK_SECRET>`.
+2. **Env file `/opt/fekra/.env` on the VM**. Make the same change in the production secret store.
+   - **Add `N8N_BASE_URL`**: the base address that each client's endpoint is appended to. It must
+     be `http` or `https`, with no query and no fragment. End it with `/`: the app adds one if it
+     is missing, but writing it keeps the value obvious. Examples:
+     `N8N_BASE_URL=https://n8n.example.com/webhook/`, or for n8n on the same VM,
+     `N8N_BASE_URL=http://host.docker.internal:5678/webhook/`. The new API refuses to boot without
+     it. The deploy's preflight step stops the deploy before anything changes when it is missing,
+     empty or malformed.
+   - **Keep `N8N_WEBHOOK_URL` for now** and remove it in step 9. The new release does not read it,
+     but the previous release needs it. A failed health check rolls the deploy back to that
+     release automatically, and without the variable it drops every DM.
+   - Check that `N8N_WEBHOOK_SECRET` is set. Without it, the n8n callback and the lead endpoints
+     refuse every request.
+   - Optional: `PAUSE_SWEEP_INTERVAL_MS`, `COMMENT_EXPORT_BATCH`, `RETENTION_MONTHS` (defaults in
+     `.env.example`). The first retention run, 1 minute after boot, deletes conversations,
+     exchanges, comments and leads older than the period. With the default 12 months that is
+     nothing today: these tables only exist since 2026-11-09.
+   - Check without printing any value: `grep -c '^N8N_BASE_URL=.' /opt/fekra/.env` prints `1`. Once
+     the deploy files are on the VM, `bash /opt/fekra/deploy/remote-deploy.sh preflight` runs the
+     same check as the pipeline.
+3. Have the dashboard build for 003 ready to deploy.
+
+### Deploy
+
+4. Merge to `main`. CI runs, then the deploy workflow: preflight → `prisma migrate deploy`
+   (`chat_workflow_pause_export`, `shared_chat_workflow_endpoint`, `leads`) → new API →
+   `GET /health`.
+5. Deploy the dashboard right after.
+
+### Right after the deploy
+
+6. **Subscribe every client that should keep chatting** with `PATCH /clients/:id`: the Postman
+   request `Clients / Update Client`, or the client form once the dashboard is live. Read the
+   client first (`GET /clients/:id`) for its `version`, then send:
+
+   ```http
+   PATCH https://<api-host>/api/clients/<clientId>
+   Authorization: Bearer <admin access token>
+   Content-Type: application/json
+
+   { "version": 3, "chatWorkflowEndpoint": "chat-shop", "chatSubscribed": true }
+   ```
+
+   Several clients may get the same endpoint. `GET /clients?chatSubscribed=false` (the
+   dashboard's **Only not subscribed** switch) lists the clients that are left.
+7. **Verify**: one DM per client reaches its workflow (n8n's execution log), and the customer gets
+   the reply.
+8. **Check what was not delivered.** A DM for an unsubscribed client is dropped before it is
+   stored, with a `warn` log line. A DM already queued when its delivery is refused goes to the
+   Redis dead list `n8n:dead`.
+
+   ```bash
+   # DMs dropped because the client is not subscribed (ids only, no text)
+   docker logs fekra-api-1 --since 1h 2>&1 | grep -c 'chat service not subscribed'
+   # dead-list reasons (add -n <REDIS_DB> when REDIS_DB is not 0)
+   docker exec fekra-redis-1 redis-cli LRANGE n8n:dead 0 -1 \
+     | grep -o '"reason":"[A-Z_]*"' | sort | uniq -c
+   ```
+
+   - `UNSUBSCRIBED`: the client is not subscribed: go back to step 6.
+   - `NO_ENDPOINT`: subscribed without an endpoint. This should not happen (the API answers `422`),
+     so check the client.
+   - `MAX_ATTEMPTS`: the workflow never called back. It is inactive, or the endpoint is wrong.
+
+   Each entry's `payload.client.id` names the client. The entries hold customer messages: don't
+   paste them anywhere. Dead-listed DMs are not sent again; answer those customers from the page
+   inbox if needed.
+9. **Once the release is verified**, remove `N8N_WEBHOOK_URL` from `/opt/fekra/.env` and from the
+   secret store. Keep the old value in the secret store's history, because a rollback needs it.
+
+**Rollback**: put `N8N_WEBHOOK_URL` back in `/opt/fekra/.env` if it was removed, then redeploy
+the previous SHA. The previous release ignores the new columns and tables and sends every DM to
+`N8N_WEBHOOK_URL` again. The three migrations stay applied and need no undo: the previous release
+never reads `leads` or the endpoint index.

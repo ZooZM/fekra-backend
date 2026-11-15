@@ -55,6 +55,15 @@ jobs:
           gcloud compute scp --recurse deploy "${{ vars.VM_NAME }}:/opt/fekra/" \
             --zone "${{ vars.VM_ZONE }}" --tunnel-through-iap --quiet
 
+      # Fails here, before any image is pulled or any migration applied, when /opt/fekra/.env lacks
+      # a value the new API cannot boot without (N8N_BASE_URL). It prints no value. The api deploy
+      # below runs the same check again first.
+      - name: 'Preflight: VM configuration'
+        run: |
+          gcloud compute ssh "${{ vars.VM_NAME }}" --zone "${{ vars.VM_ZONE }}" \
+            --tunnel-through-iap --quiet --command \
+            "bash /opt/fekra/deploy/remote-deploy.sh preflight"
+
       - name: Deploy over IAP
         run: |
           gcloud compute ssh "${{ vars.VM_NAME }}" --zone "${{ vars.VM_ZONE }}" \
