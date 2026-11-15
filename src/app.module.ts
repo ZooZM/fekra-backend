@@ -21,6 +21,7 @@ import { GraphApiModule } from './inbox/graph-api.module';
 import { CommentsModule } from './comments/comments.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { RetentionModule } from './retention/retention.module';
+import { LeadsModule } from './leads/leads.module';
 
 function devModules() {
   if (process.env.NODE_ENV === 'production') return [];
@@ -52,6 +53,7 @@ function devModules() {
     BusinessInfoModule,
     OffersModule,
     InboxModule,
+    LeadsModule,
     RetentionModule,
     MetaWebhookModule,
     GraphApiModule,

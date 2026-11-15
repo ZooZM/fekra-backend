@@ -52,6 +52,7 @@ describe('ConversationsService', () => {
         'pause',
         'resume',
         'releaseExpiredPauses',
+        'findRecentExchanges',
       ].map((method) => [method, jest.fn()]),
     );
     repo.lastExchanges.mockResolvedValue(new Map());
@@ -312,6 +313,25 @@ describe('ConversationsService', () => {
       await expect(service.releaseExpiredPauses()).resolves.toBe(3);
       expect(repo.releaseExpiredPauses).toHaveBeenCalledWith(NOW);
       jest.useRealTimers();
+    });
+  });
+
+  describe('recentExchanges (feature 004)', () => {
+    it('delegates to the repository with the client scope', async () => {
+      const rows = [
+        { message: 'hi', reply: 'hello', answered: true, createdAt: NOW },
+      ];
+      repo.findRecentExchanges.mockResolvedValue(rows);
+      const query = {
+        clientId: 'client-1',
+        platform: 'INSTAGRAM' as const,
+        receiverId: 'ig-1',
+        senderId: 'customer-1',
+        limit: 10,
+      };
+
+      await expect(service.recentExchanges(query)).resolves.toBe(rows);
+      expect(repo.findRecentExchanges).toHaveBeenCalledWith(query);
     });
   });
 });

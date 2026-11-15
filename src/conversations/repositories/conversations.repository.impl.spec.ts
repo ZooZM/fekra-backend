@@ -11,7 +11,7 @@ describe('ConversationsRepository (feature 003)', () => {
   };
   let prisma: {
     chat: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock };
-    messageReply: { create: jest.Mock };
+    messageReply: { create: jest.Mock; findMany: jest.Mock };
     $queryRaw: jest.Mock;
     $executeRaw: jest.Mock;
     $transaction: jest.Mock;
@@ -43,7 +43,10 @@ describe('ConversationsRepository (feature 003)', () => {
         count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn(),
       },
-      messageReply: { create: jest.fn().mockResolvedValue({}) },
+      messageReply: {
+        create: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $queryRaw: jest.fn(),
       $executeRaw: jest.fn(),
       $transaction: jest.fn((arg: unknown) =>
@@ -320,6 +323,48 @@ describe('ConversationsRepository (feature 003)', () => {
       prisma.$executeRaw.mockResolvedValue(0);
       await repo.purgeBefore(cutoff);
       expect(prisma.$executeRaw.mock.calls[0][2]).toBe(5000);
+    });
+  });
+
+  describe('findRecentExchanges (feature 004)', () => {
+    const recent = {
+      clientId: 'client-1',
+      platform: 'FACEBOOK' as const,
+      receiverId: 'page-1',
+      senderId: 'customer-1',
+      limit: 3,
+    };
+
+    it('reads the newest rows of the conversation of that client, oldest first', async () => {
+      const at = (m: number) => new Date(NOW.getTime() - m * 60_000);
+      prisma.messageReply.findMany.mockResolvedValue([
+        { message: 'c', reply: '', answered: false, createdAt: at(1) },
+        { message: 'b', reply: 'B', answered: true, createdAt: at(2) },
+        { message: 'a', reply: 'A', answered: true, createdAt: at(3) },
+      ]);
+
+      const rows = await repo.findRecentExchanges(recent);
+
+      expect(rows.map((r) => r.message)).toEqual(['a', 'b', 'c']);
+      expect(prisma.messageReply.findMany).toHaveBeenCalledWith({
+        where: {
+          chat: {
+            clientId: 'client-1',
+            platform: 'FACEBOOK',
+            receiverId: 'page-1',
+            senderId: 'customer-1',
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 3,
+        select: { message: true, reply: true, answered: true, createdAt: true },
+      });
+    });
+
+    it('returns [] when there is no conversation, and creates nothing', async () => {
+      await expect(repo.findRecentExchanges(recent)).resolves.toEqual([]);
+      expect(prisma.messageReply.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

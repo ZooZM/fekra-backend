@@ -1,5 +1,5 @@
-import { ExportFiltersSchema } from './json-columns.schema';
-import { readExportFilters } from './json-readers';
+import { ExportFiltersSchema, LeadFieldsSchema } from './json-columns.schema';
+import { readExportFilters, readLeadFields } from './json-readers';
 
 describe('readExportFilters', () => {
   const valid = {
@@ -35,5 +35,31 @@ describe('readExportFilters', () => {
     expect(
       ExportFiltersSchema.safeParse({ ...valid, comment: 'hello' }).success,
     ).toBe(false);
+  });
+});
+
+describe('readLeadFields', () => {
+  it('returns a stored flat map of texts', () => {
+    const fields = { industry: 'clothes', page_link: 'https://x.test' };
+    expect(readLeadFields(fields)).toEqual(fields);
+    expect(readLeadFields({})).toEqual({});
+  });
+
+  it.each([
+    ['a nested value', { a: { b: 'c' } }],
+    ['a number', { budget: 5000 }],
+    ['an array', ['a']],
+    ['null', null],
+    ['a value over 500 characters', { a: 'x'.repeat(501) }],
+    ['a key over 50 characters', { ['k'.repeat(51)]: 'v' }],
+  ])('falls back to an empty map for %s', (_label, stored) => {
+    expect(readLeadFields(stored)).toEqual({});
+  });
+
+  it('does not cap the number of stored keys: saves add up over time', () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 40 }, (_, i) => [`k${i}`, 'v']),
+    );
+    expect(LeadFieldsSchema.safeParse(many).success).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import { RetentionService } from './retention.service';
 describe('RetentionService', () => {
   let conversations: { purgeBefore: jest.Mock };
   let comments: { purgeBefore: jest.Mock };
+  let leads: { purgeBefore: jest.Mock };
   let log: jest.SpyInstance;
   let error: jest.SpyInstance;
 
@@ -12,6 +13,7 @@ describe('RetentionService', () => {
       { get: () => months } as never,
       conversations as never,
       comments as never,
+      leads as never,
     );
 
   beforeEach(() => {
@@ -22,6 +24,7 @@ describe('RetentionService', () => {
       purgeBefore: jest.fn().mockResolvedValue({ chats: 2, exchanges: 5 }),
     };
     comments = { purgeBefore: jest.fn().mockResolvedValue(7) };
+    leads = { purgeBefore: jest.fn().mockResolvedValue(3) };
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -77,18 +80,19 @@ describe('RetentionService', () => {
   });
 
   describe('a run', () => {
-    it('deletes through both services with the same cutoff', async () => {
+    it('deletes through the three services with the same cutoff', async () => {
       await build(12).runOnce(new Date('2026-11-14T12:00:00.000Z'));
 
       const cutoff = new Date('2025-11-14T12:00:00.000Z');
       expect(conversations.purgeBefore).toHaveBeenCalledWith(cutoff);
       expect(comments.purgeBefore).toHaveBeenCalledWith(cutoff);
+      expect(leads.purgeBefore).toHaveBeenCalledWith(cutoff);
     });
 
-    it('logs the three counts and no text', async () => {
+    it('logs the four counts and no text', async () => {
       await build(12).runOnce();
       expect(log).toHaveBeenCalledWith(
-        'Retention run: deleted 2 conversations, 5 exchanges and 7 comments older than 12 months',
+        'Retention run: deleted 2 conversations, 5 exchanges, 7 comments and 3 leads older than 12 months',
       );
     });
 
@@ -100,6 +104,7 @@ describe('RetentionService', () => {
         expect.any(String),
       );
       expect(comments.purgeBefore).not.toHaveBeenCalled();
+      expect(leads.purgeBefore).not.toHaveBeenCalled();
     });
   });
 

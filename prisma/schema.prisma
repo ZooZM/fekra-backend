@@ -108,6 +108,7 @@ model Client {
   users          User[]
   chats          Chat[]
   commentReplies CommentReply[]
+  leads          Lead[]
 
   @@index([chatWorkflowEndpoint])
   @@map("clients")
@@ -411,4 +412,39 @@ model CommentExportRecord {
   @@index([actorId])
   @@index([createdAt])
   @@map("comment_export_records")
+}
+
+// ───────────────────────────── Leads ─────────────────────────────
+
+// What a chat workflow has learned about one customer on one client account (feature 004). Generic:
+// it serves every client, and per-business data goes in `fields`. Only n8n reads and writes it,
+// through /n8n/leads. Holds personal data (phone numbers): the retention run deletes leads not
+// updated for RETENTION_MONTHS.
+model Lead {
+  id         String    @id @default(uuid()) @db.Uuid
+  clientId   String    @map("client_id") @db.Uuid
+  platform   Platform
+  // Page ID / IG account ID: always the client's own (checked on every request)
+  accountId  String    @map("account_id") @db.VarChar(255)
+  // PSID / IGSID
+  senderId   String    @map("sender_id") @db.VarChar(255)
+  // Free text: stages differ per client
+  stage      String    @default("new") @db.VarChar(50)
+  phone      String?   @db.VarChar(30)
+  country    String?   @db.VarChar(2)
+  lastIntent String?   @map("last_intent") @db.VarChar(50)
+  summary    String?   @db.Text
+  // Flat object of string values. LeadFieldsSchema, read through readLeadFields
+  fields     Json      @default("{}")
+  // Set once, by a conditional update: the request that set it notifies the client
+  notifiedAt DateTime? @map("notified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, accountId, senderId])
+  @@index([clientId, stage, updatedAt])
+  @@index([updatedAt])
+  @@map("leads")
 }

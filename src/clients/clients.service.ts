@@ -22,6 +22,7 @@ import {
 } from './types/client.types';
 import { ReplyRunActivityDetails } from '@common/zod/json-columns.schema';
 import { randomUUID } from 'crypto';
+import { Platform } from '@app/generated/prisma/client';
 import { QueryClientInput } from './schemas/query-client.schema';
 
 @Injectable()
@@ -83,6 +84,23 @@ export class ClientsService {
     if (!(await this.repo.delete(id, actor))) {
       throw new NotFoundException('Client not found');
     }
+  }
+
+  /**
+   * True when the client exists and `accountId` is its account on that platform: the Facebook
+   * page id or the Instagram account id. Read fresh (never cached), because the n8n lead endpoints
+   * scope every read and write with it (feature 004).
+   */
+  async ownsAccount(
+    clientId: string,
+    platform: Platform,
+    accountId: string,
+  ): Promise<boolean> {
+    const client = await this.repo.findById(clientId);
+    if (!client) return false;
+    const owned =
+      platform === 'FACEBOOK' ? client.fbPageId : client.instaAccountId;
+    return owned !== null && owned === accountId;
   }
 
   /** Null when there's no match, so webhook code can drop the event. Throw a 404 in a controller if an endpoint needs one. */

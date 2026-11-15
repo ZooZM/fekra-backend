@@ -13,9 +13,11 @@ import {
 } from '../schemas/message-reply.schema';
 import {
   ChatRowWithClient,
+  ExchangeSummary,
   LastExchange,
   PauseActor,
   PauseDuration,
+  RecentExchangesQuery,
 } from '../types/chat.types';
 import { IConversationsRepository } from './IConversationsRepository.repository';
 
@@ -130,6 +132,27 @@ export class ConversationsRepository implements IConversationsRepository {
     ]);
 
     return paginate(data, total, query.page, query.limit);
+  }
+
+  async findRecentExchanges(
+    query: RecentExchangesQuery,
+  ): Promise<ExchangeSummary[]> {
+    // The chat is found through its unique key, then the (chat_id, created_at) index gives the
+    // newest rows; they are reversed to read top to bottom.
+    const rows = await this.prisma.messageReply.findMany({
+      where: {
+        chat: {
+          clientId: query.clientId,
+          platform: query.platform,
+          receiverId: query.receiverId,
+          senderId: query.senderId,
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: query.limit,
+      select: { message: true, reply: true, answered: true, createdAt: true },
+    });
+    return rows.reverse();
   }
 
   findOrCreate(data: FindOrCreateChatInput): Promise<Chat> {

@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { CommentsModule } from '@app/comments/comments.module';
 import { ConversationsModule } from '@app/conversations/conversations.module';
+import { LeadsModule } from '@app/leads/leads.module';
 import { RetentionService } from './retention.service';
 
 /** A pipeline module: it owns no tables and deletes through the exported services. */
 @Module({
-  imports: [ConversationsModule, CommentsModule],
+  imports: [ConversationsModule, CommentsModule, LeadsModule],
   providers: [RetentionService],
 })
 export class RetentionModule {}

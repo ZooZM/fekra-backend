@@ -30,7 +30,9 @@ import { isEffectivelyPaused, toChatRecord } from './mappers/chat.mapper';
 import {
   ChatRecord,
   ChatRowWithClient,
+  ExchangeSummary,
   PAUSE_DURATION_MS,
+  RecentExchangesQuery,
 } from './types/chat.types';
 
 @Injectable()
@@ -109,6 +111,14 @@ export class ConversationsService {
   /** True while the assistant must not answer this conversation. */
   isPaused(chat: Pick<Chat, 'pausedAt' | 'pausedUntil'>): boolean {
     return isEffectivelyPaused(chat);
+  }
+
+  /**
+   * For the n8n lead context (feature 004): the latest exchanges of one client's conversation with
+   * one customer, oldest first. The caller has already checked that the account is the client's.
+   */
+  recentExchanges(query: RecentExchangesQuery): Promise<ExchangeSummary[]> {
+    return this.repo.findRecentExchanges(query);
   }
 
   findOrCreate(input: z.input<typeof FindOrCreateChatSchema>): Promise<Chat> {

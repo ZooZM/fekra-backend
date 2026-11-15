@@ -50,6 +50,8 @@ export const readReplyRunDetails = reader(
   S.ReplyRunActivityDetailsSchema.nullable(),
   null,
 );
+/** `Lead.fields`: an empty map when the stored value is not a flat map of texts. */
+export const readLeadFields = reader('lead fields', S.LeadFieldsSchema, {});
 export const readExportFilters = reader(
   'exportFilters',
   S.ExportFiltersSchema,

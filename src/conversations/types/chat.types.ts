@@ -1,4 +1,4 @@
-import { Prisma } from '@app/generated/prisma/client';
+import { Platform, Prisma } from '@app/generated/prisma/client';
 
 /** How long an administrator pauses the assistant in one conversation (FR-009). */
 export type PauseDuration = 'until_resumed' | '1h' | '24h' | '7d';
@@ -27,6 +27,26 @@ export interface LastExchange {
   reply: string;
   answered: boolean;
   createdAt: Date;
+}
+
+/** One exchange as an n8n chat workflow reads it (feature 004): full texts, no ids. */
+export interface ExchangeSummary {
+  message: string;
+  /** "" when answered is false */
+  reply: string;
+  answered: boolean;
+  createdAt: Date;
+}
+
+/** Which conversation to read the latest exchanges of: one client's, with one customer. */
+export interface RecentExchangesQuery {
+  clientId: string;
+  platform: Platform;
+  /** The client's account (Page ID / Instagram account ID). */
+  receiverId: string;
+  /** The customer (PSID / IGSID). */
+  senderId: string;
+  limit: number;
 }
 
 /** What the API returns for a conversation (data-model §8). */

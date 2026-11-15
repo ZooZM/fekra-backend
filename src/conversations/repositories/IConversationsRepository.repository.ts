@@ -8,9 +8,11 @@ import {
 } from '../schemas/message-reply.schema';
 import {
   ChatRowWithClient,
+  ExchangeSummary,
   LastExchange,
   PauseActor,
   PauseDuration,
+  RecentExchangesQuery,
 } from '../types/chat.types';
 
 export const CONVERSATIONS_REPOSITORY = 'CONVERSATIONS_REPOSITORY';
@@ -30,6 +32,12 @@ export interface IConversationsRepository {
     chatId: string,
     query: QueryMessageReplyInput,
   ): Promise<PaginatedResult<MessageReply>>;
+  /**
+   * The last `limit` exchanges of the client's conversation with the customer, oldest first,
+   * unanswered ones included. [] when there is no such conversation (another client's conversation
+   * on the same account does not count). Creates nothing.
+   */
+  findRecentExchanges(query: RecentExchangesQuery): Promise<ExchangeSummary[]>;
   findOrCreate(data: FindOrCreateChatInput): Promise<Chat>;
   createMessage(data: CreateMessageReplyInput): Promise<MessageReply>;
   /** A customer message the assistant did not answer: reply '' and answered = false. */
