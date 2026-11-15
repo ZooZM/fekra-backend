@@ -2335,6 +2335,77 @@
         ],
         "type": "object"
       },
+      "N8nCallbackDto": {
+        "properties": {
+          "dmText": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "publicReply": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "publicReplyIfDmClosed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "publicReplyIfDmSent": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "engagement",
+                  "question"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "N8nCallbackResultDto": {
+        "properties": {
+          "acknowledged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "acknowledged"
+        ],
+        "type": "object"
+      },
       "PaginatedClientsDto": {
         "properties": {
           "data": {
@@ -4832,8 +4903,25 @@
       "post": {
         "operationId": "N8nCallbackController_callback",
         "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/N8nCallbackDto"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/N8nCallbackResultDto"
+                }
+              }
+            },
             "description": ""
           }
         },

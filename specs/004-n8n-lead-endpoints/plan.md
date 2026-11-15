@@ -117,4 +117,9 @@ changes in the module that owns it.
 
 ## Complexity Tracking
 
-No violation. Public routes are justified under Constitution IV above.
+Public routes are justified under Constitution IV above.
+
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|---|---|---|
+| `N8nCallbackSchema` is a `z.looseObject`, not `z.strictObject` (closes the constitution II follow-up "n8n callback body bypasses Zod") | The live n8n workflows post to the callback today and may add keys of their own; they also send `null` or `""` for empty expressions. The schema accepts exactly what the controller accepted before | A strict object would refuse a live workflow's callback, and its reply would never reach the customer |
+| Invalid callback bodies answer `422 INPUT_VALIDATION_ERROR` instead of `400` | One validation path (the global Zod pipe) for every body, as for every other endpoint | Only requests that already failed change status, and the only caller (n8n) does not branch on it: an unanswered request is resent by the TTL either way |

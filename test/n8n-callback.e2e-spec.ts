@@ -37,19 +37,44 @@ describe('n8n callback (e2e)', () => {
     },
   );
 
-  it('answers 400 without an id, with the right secret', async () => {
-    const res = await request(http())
-      .post('/n8n/callback')
-      .set('x-webhook-secret', secret())
-      .send({ text: 'hi' });
-    expect(res.status).toBe(400);
-  });
+  it.each([
+    ['no id', { text: 'hi' }, 'id'],
+    ['an unknown comment type', { id: 'r1', type: 'complaint' }, 'type'],
+  ])(
+    'answers 422 INPUT_VALIDATION_ERROR for %s (Zod DTO since 004, was 400)',
+    async (_label, body, field) => {
+      const res = await request(http())
+        .post('/n8n/callback')
+        .set('x-webhook-secret', secret())
+        .send(body);
+      expect(res.status).toBe(422);
+      expect(res.body).toMatchObject({
+        errorCode: 'INPUT_VALIDATION_ERROR',
+        details: { fieldErrors: { [field]: expect.any(Array) as unknown } },
+      });
+    },
+  );
 
   it('acknowledges an unknown id with acknowledged: false', async () => {
     const res = await request(http())
       .post('/n8n/callback')
       .set('x-webhook-secret', secret())
       .send({ id: 'unknown-request', text: 'hi' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ acknowledged: false });
+  });
+
+  it('still accepts what live workflows send: null and "" texts, an empty type, extra keys', async () => {
+    const res = await request(http())
+      .post('/n8n/callback')
+      .set('x-webhook-secret', secret())
+      .send({
+        id: 'unknown-request-2',
+        text: null,
+        publicReply: '',
+        type: '',
+        executionId: 'n8n-123',
+      });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ acknowledged: false });
   });

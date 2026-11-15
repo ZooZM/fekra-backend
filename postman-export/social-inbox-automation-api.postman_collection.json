@@ -1665,7 +1665,7 @@
                 "callback"
               ]
             },
-            "description": "Used when the pending request is of kind `batch` (direct messages). Only `id` and `text` are used. Empty/blank `text` sends nothing.\n\n**Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `400` missing id | `401` bad secret"
+            "description": "Used when the pending request is of kind `batch` (direct messages). Only `id` and `text` are used. Empty/blank `text` sends nothing.\n\n**Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `422` `INPUT_VALIDATION_ERROR` missing id or a `type` other than `engagement`/`question` (was `400` before feature 004) | `401` bad secret (checked first)\n\nExtra keys are ignored, and `null` or `\"\"` texts mean \"not sent\"."
           },
           "response": []
         },

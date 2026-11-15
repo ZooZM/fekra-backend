@@ -1,7 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { N8nSecretGuard } from '@common/guards/n8n-secret.guard';
 import { N8nCallbackController } from './n8n-callback.controller';
+import { N8nCallbackDto } from './schemas/n8n-callback.schema';
 
 describe('N8nCallbackController', () => {
   let delivery: { take: jest.Mock };
@@ -28,21 +28,35 @@ describe('N8nCallbackController', () => {
     expect(guards).toEqual([N8nSecretGuard]);
   });
 
-  describe('the body', () => {
-    it('needs an id', async () => {
-      await expect(controller.callback({ text: 'hi' })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    });
-
-    it('accepts only the two comment types', async () => {
-      await expect(
-        controller.callback({ id: 'r1', type: 'complaint' as never }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
+  it('validates the body with its Zod DTO (cases in schemas/n8n-callback.schema.spec.ts)', () => {
+    const [bodyType] = Reflect.getMetadata(
+      'design:paramtypes',
+      N8nCallbackController.prototype,
+      'callback',
+    ) as unknown[];
+    expect(bodyType).toBe(N8nCallbackDto);
   });
 
   describe('handling a callback', () => {
+    it('falls back to engagement and ignores null texts of a comment answer', async () => {
+      const payload = { kind: 'comment', id: 'c-1' };
+      delivery.take.mockResolvedValue({ payload, attempts: 1 });
+
+      await controller.callback({
+        id: 'r1',
+        publicReply: ' hi ',
+        dmText: null,
+      });
+
+      expect(commentReply.handleN8nReply).toHaveBeenCalledWith(payload, {
+        type: 'engagement',
+        publicReply: 'hi',
+        dmText: undefined,
+        publicReplyIfDmSent: undefined,
+        publicReplyIfDmClosed: undefined,
+      });
+    });
+
     it('answers acknowledged: false for an unknown or expired id, without sending anything', async () => {
       delivery.take.mockResolvedValue(null);
       await expect(
