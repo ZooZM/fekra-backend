@@ -105,7 +105,8 @@ src/
 └── retention/retention.service.ts (+ spec), retention.module.ts   # + leads
 
 prisma/schema.prisma, prisma/migrations/<ts>_shared_chat_workflow_endpoint/, <ts>_leads/
-test/n8n-leads.e2e-spec.ts (NEW), retention.e2e-spec.ts, clients-chat-service.e2e-spec.ts
+test/n8n-leads.e2e-spec.ts (NEW), n8n-callback.e2e-spec.ts (NEW: the callback contract after the
+guard refactor), retention.e2e-spec.ts, clients-chat-service.e2e-spec.ts
 deploy/remote-deploy.sh, deploy/compose.yml, .github/workflows/deploy.yml
 postman/collections/Social Inbox Automation API/n8n Data/ (NEW), openapi/openapi.json
 specs/003-chat-frontend-comment-analysis/{spec,research,data-model,plan,quickstart}.md, contracts/

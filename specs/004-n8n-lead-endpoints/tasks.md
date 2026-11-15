@@ -24,7 +24,8 @@ real PostgreSQL and Redis through `test/utils`. A bug fix starts with a failing 
   401; right → pass). Same logic as the callback's `isAuthorized`.
 - [X] T003 Refactor `src/inbox/n8n-callback.controller.ts` to `@UseGuards(N8nSecretGuard)`; move the
   secret cases of its spec to the guard spec and assert the guard is on the controller. Body checks
-  and responses unchanged.
+  and responses unchanged; `test/n8n-callback.e2e-spec.ts` pins the contract (401 body before the
+  body is read, 400 without an id, `acknowledged: false` for an unknown id).
 
 ## Phase 2: US5 Voice prompt (P3, independent)
 
