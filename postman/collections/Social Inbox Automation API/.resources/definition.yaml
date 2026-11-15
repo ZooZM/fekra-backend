@@ -1,11 +1,11 @@
 $kind: collection
 description: |-
-  Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).
+  Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, conversations, comments, n8n callback, n8n data and Meta webhooks).
 
   ## Getting started
   1. Set the `baseUrl` collection variable (default `http://localhost:3000`).
   2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.
-  3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).
+  3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, n8n data, Meta webhooks).
   4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.
 
   ## Variables
@@ -18,7 +18,8 @@ description: |-
   | `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |
   | `postId`, `nextCursor` | Saved by **Clients → List Client Posts**: the first post's id and the next page's cursor |
   | `runId` | Saved by **Inbox → Backfill Unanswered Comments**: the reply run's id |
-  | `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |
+  | `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` (n8n callback and n8n data) |
+  | `customerId` | A customer id (PSID / IGSID) for the conversation filters and the n8n data requests |
   | `metaVerifyToken` | Must equal server webhook verify token |
   | `metaAppSecret` | Meta app secret used to sign webhook payloads |
   | `pageId`, `igAccountId` | Ids used in sample webhook payloads |
@@ -39,6 +40,7 @@ variables:
   nextCursor: ""
   runId: ""
   n8nWebhookSecret: change-me
+  customerId: "7000000000000001"
   metaVerifyToken: change-me
   metaAppSecret: change-me
   pageId: "100000000000000"

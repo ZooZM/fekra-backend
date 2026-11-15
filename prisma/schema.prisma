@@ -34,6 +34,19 @@ enum Platform {
   INSTAGRAM
 }
 
+// How a comment's label was decided (feature 003). UNKNOWN = rows from before it was recorded.
+enum CommentDecisionBasis {
+  RULES
+  AI_MODEL
+  SAFE_FALLBACK
+  UNKNOWN
+}
+
+enum ChatPauseAction {
+  PAUSED
+  RESUMED
+}
+
 enum CommentClassification {
   ENGAGEMENT
   INQUIRY
@@ -59,6 +72,13 @@ model Client {
   accessToken String @map("access_token") @db.Text
 
   brandLogo String? @map("brand_logo") @db.VarChar(255)
+
+  // The client's n8n chat workflow: one path segment added to N8N_BASE_URL (validated in NestJS).
+  // Several clients may share one workflow (feature 004), so it is not unique. Only a subscribed
+  // client's DMs are stored and delivered; subscribing needs an endpoint (also guarded by a CHECK
+  // constraint in the migration).
+  chatWorkflowEndpoint String? @map("chat_workflow_endpoint") @db.VarChar(100)
+  chatSubscribed       Boolean @default(false) @map("chat_subscribed")
 
   // AI config (validate in NestJS: brandVoice max 400 chars,
   // language one of ENGLISH | ARABIC | ENGLISH_ARABIC)
@@ -88,7 +108,9 @@ model Client {
   users          User[]
   chats          Chat[]
   commentReplies CommentReply[]
+  leads          Lead[]
 
+  @@index([chatWorkflowEndpoint])
   @@map("clients")
 }
 
@@ -260,7 +282,8 @@ model ClientActivity {
 // ───────────────────────────── Chats ─────────────────────────────
 // One conversation between a customer and one of the client's accounts.
 // The `id` is the chat_id that message_replies point to.
-// These tables hold customers' messages: decide a retention period and purge old rows.
+// These tables hold customers' messages: RETENTION_MONTHS (default 12) decides how long they stay,
+// and a daily run deletes the older rows.
 model Chat {
   id       String   @id @default(uuid()) @db.Uuid
   clientId String   @map("client_id") @db.Uuid
@@ -271,15 +294,26 @@ model Chat {
   // The client's account that received the message: matches Client.fbPageId or Client.instaAccountId
   receiverId String @map("receiver_id") @db.VarChar(255)
 
+  // Assistant pause. Paused now = pausedAt set AND (pausedUntil null OR pausedUntil > now): the
+  // state is computed, never trusted from a flag. pausedUntil null = until resumed.
+  pausedAt     DateTime? @map("paused_at")
+  pausedUntil  DateTime? @map("paused_until")
+  // Copied from the admin (no foreign key), so they outlive the user
+  pausedById   String?   @map("paused_by_id") @db.Uuid
+  pausedByName String?   @map("paused_by_name") @db.VarChar(255)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  client   Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  messages MessageReply[]
+  client      Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  messages    MessageReply[]
+  pauseEvents ChatPauseEvent[]
 
   // One chat per customer per account, so find-or-create is a single upsert
   @@unique([platform, receiverId, senderId])
   @@index([clientId])
+  @@index([updatedAt])
+  @@index([pausedUntil])
   @@map("chats")
 }
 
@@ -290,8 +324,11 @@ model MessageReply {
   id     String @id @default(uuid()) @db.Uuid
   chatId String @map("chat_id") @db.Uuid
 
-  message String @db.Text
-  reply   String @db.Text
+  message  String  @db.Text
+  // Empty when answered = false
+  reply    String  @db.Text
+  // false = the assistant did not answer (the conversation was paused)
+  answered Boolean @default(true)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -299,7 +336,29 @@ model MessageReply {
 
   // Loading a chat's history in order
   @@index([chatId, createdAt])
+  // Retention deletes by age
+  @@index([createdAt])
   @@map("message_replies")
+}
+
+// Every pause and resume of a conversation. Append-only (so no updatedAt), like ClientActivity.
+// actorId null on RESUMED = the timed pause ended by itself.
+model ChatPauseEvent {
+  id        String          @id @default(uuid()) @db.Uuid
+  chatId    String          @map("chat_id") @db.Uuid
+  action    ChatPauseAction
+  // PAUSED only: until_resumed | 1h | 24h | 7d
+  duration  String?         @db.VarChar(16)
+  // PAUSED only: the end time, null = until resumed
+  until     DateTime?
+  actorId   String?         @map("actor_id") @db.Uuid
+  actorName String?         @map("actor_name") @db.VarChar(255)
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+  @@map("chat_pause_events")
 }
 
 // ───────────────────────────── Comments ─────────────────────────────
@@ -319,6 +378,10 @@ model CommentReply {
   classification CommentClassification
   // e.g. `keyword "how"`, `question mark`, or the LLM's explanation
   reason         String                @db.Text
+  // How the label was decided, so the model can be judged later (feature 003)
+  decisionBasis  CommentDecisionBasis  @default(UNKNOWN) @map("decision_basis")
+  // The model that gave the label (AI_MODEL only)
+  decisionModel  String?               @map("decision_model") @db.VarChar(100)
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -326,5 +389,62 @@ model CommentReply {
 
   @@unique([platform, commentId])
   @@index([clientId, createdAt])
+  // All-clients list, export keyset and retention
+  @@index([createdAt, id])
   @@map("comment_replies")
+}
+
+// One row per comments download: who, when, which filters, how many rows, did it finish.
+// The filters hold no comment text. Written when the download starts (completed = false) and
+// updated when it ends. No relations on purpose: it outlives the admin account.
+model CommentExportRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  actorName  String   @map("actor_name") @db.VarChar(255)
+  actorEmail String   @map("actor_email") @db.VarChar(255)
+  // ExportFiltersSchema, read through readExportFilters
+  filters    Json
+  rowCount   Int?     @map("row_count")
+  completed  Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("comment_export_records")
+}
+
+// ───────────────────────────── Leads ─────────────────────────────
+
+// What a chat workflow has learned about one customer on one client account (feature 004). Generic:
+// it serves every client, and per-business data goes in `fields`. Only n8n reads and writes it,
+// through /n8n/leads. Holds personal data (phone numbers): the retention run deletes leads not
+// updated for RETENTION_MONTHS.
+model Lead {
+  id         String    @id @default(uuid()) @db.Uuid
+  clientId   String    @map("client_id") @db.Uuid
+  platform   Platform
+  // Page ID / IG account ID: always the client's own (checked on every request)
+  accountId  String    @map("account_id") @db.VarChar(255)
+  // PSID / IGSID
+  senderId   String    @map("sender_id") @db.VarChar(255)
+  // Free text: stages differ per client
+  stage      String    @default("new") @db.VarChar(50)
+  phone      String?   @db.VarChar(30)
+  country    String?   @db.VarChar(2)
+  lastIntent String?   @map("last_intent") @db.VarChar(50)
+  summary    String?   @db.Text
+  // Flat object of string values. LeadFieldsSchema, read through readLeadFields
+  fields     Json      @default("{}")
+  // Set once, by a conditional update: the request that set it notifies the client
+  notifiedAt DateTime? @map("notified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, accountId, senderId])
+  @@index([clientId, stage, updatedAt])
+  @@index([updatedAt])
+  @@map("leads")
 }

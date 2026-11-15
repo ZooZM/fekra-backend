@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationError } from 'class-validator';
-import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod';
+import { cleanupOpenApiDoc } from 'nestjs-zod';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import cookieParser = require('cookie-parser');
 
@@ -42,8 +42,10 @@ export function configureApp(app: INestApplication): void {
     app.enableCors({ origin: origins, credentials: true });
   }
 
+  // Zod validation is the APP_PIPE of AppModule (AppZodValidationPipe: 422 INPUT_VALIDATION_ERROR).
+  // It must be the ONLY Zod pass: a second one would validate the already transformed value, and a
+  // transform that is not idempotent (a Date, a boolean) would be refused as "400 Validation failed".
   app.useGlobalPipes(
-    new ZodValidationPipe(),
     new ValidationPipe({
       exceptionFactory: (errors) =>
         new UnprocessableEntityException({

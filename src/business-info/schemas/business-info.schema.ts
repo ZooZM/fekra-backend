@@ -39,6 +39,30 @@ export const UpdateBusinessInfoSchema = BusinessInfoFields.partial().refine(
   'At least one field is required',
 );
 
+// ── Bodies for the routes that carry the client in the path (feature 003) ──
+// clientId is optional in the body, because the path decides. When it is sent it must match.
+export const CreateBusinessInfoBodySchema = BusinessInfoFields.extend({
+  clientId: z.uuid().optional(),
+  socialMedia: SocialMediaSchema.default([]),
+  paymentMethods: uniqueStrings().default([]),
+  installmentOptions: uniqueStrings().default([]),
+});
+
+// A field that is not sent stays unchanged, and null clears a nullable field.
+export const UpdateBusinessInfoBodySchema = BusinessInfoFields.partial()
+  .extend({ clientId: z.uuid().optional() })
+  .refine(
+    (v) => Object.keys(v).some((key) => key !== 'clientId'),
+    'At least one field is required',
+  );
+
+export class CreateBusinessInfoBodyDto extends createZodDto(
+  CreateBusinessInfoBodySchema,
+) {}
+export class UpdateBusinessInfoBodyDto extends createZodDto(
+  UpdateBusinessInfoBodySchema,
+) {}
+
 export class CreateBusinessInfoDto extends createZodDto(
   CreateBusinessInfoSchema,
 ) {}
@@ -48,3 +72,9 @@ export class UpdateBusinessInfoDto extends createZodDto(
 
 export type CreateBusinessInfoInput = z.infer<typeof CreateBusinessInfoSchema>;
 export type UpdateBusinessInfoInput = z.infer<typeof UpdateBusinessInfoSchema>;
+export type CreateBusinessInfoBodyInput = z.infer<
+  typeof CreateBusinessInfoBodySchema
+>;
+export type UpdateBusinessInfoBodyInput = z.infer<
+  typeof UpdateBusinessInfoBodySchema
+>;

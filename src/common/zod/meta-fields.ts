@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type {
   CommentClassification,
+  CommentDecisionBasis,
   Platform,
 } from '@app/generated/prisma/client';
 
@@ -40,3 +41,22 @@ export const classificationField = z
     z.enum(['engagement', 'inquiry', 'unsure', 'complaint', 'spam', 'insult']),
   )
   .transform((c) => CLASSIFICATIONS[c]);
+
+// How a comment's label was decided. Same pattern as the two fields above; the map fails to compile
+// if an enum value is added and not mapped.
+const DECISION_BASES = {
+  rules: 'RULES',
+  ai_model: 'AI_MODEL',
+  safe_fallback: 'SAFE_FALLBACK',
+  unknown: 'UNKNOWN',
+} as const satisfies Record<
+  Lowercase<CommentDecisionBasis>,
+  CommentDecisionBasis
+>;
+
+export const decisionBasisField = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.enum(['rules', 'ai_model', 'safe_fallback', 'unknown']))
+  .transform((b) => DECISION_BASES[b]);

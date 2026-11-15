@@ -1,0 +1,17 @@
+$kind: http-request
+description: |-
+  One conversation, for the thread header. **Requires:** `ADMIN` or `CLIENT` role.
+
+  **Responses**
+  - `200` the conversation (same shape as an item of **List Chats**).
+  - `404` `NOT_FOUND` for an unknown id, and for another client's conversation when the caller is a `CLIENT` user (nothing shows whether it exists).
+  - `422` `INPUT_VALIDATION_ERROR` when the id is not a UUID.
+url: "{{baseUrl}}/chats/:chatId"
+method: GET
+pathVariables:
+  chatId: "{{chatId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is one of [200, 404]', () => pm.expect([200, 404]).to.include(pm.response.code));
+    language: text/javascript
+order: 2000

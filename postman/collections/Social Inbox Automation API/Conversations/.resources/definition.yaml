@@ -1,0 +1,6 @@
+$kind: collection
+description: |-
+  Customer conversations (private messages) and the assistant pause.
+
+  Reading needs a JWT with the `ADMIN` or `CLIENT` role (a CLIENT user only sees their own client, others answer `404`). Pause and resume are `ADMIN` only.
+order: 7600

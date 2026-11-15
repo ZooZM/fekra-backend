@@ -36,3 +36,4 @@ export const emailField = z
 export const passwordField = z.string().min(8).max(72); // bcrypt ignores everything after 72 bytes; never trim
 export const nameField = z.string().trim().min(1).max(100);
 export const IdParamSchema = z.strictObject({ id: z.uuid() });
+export const ClientIdParamSchema = z.strictObject({ clientId: z.uuid() });

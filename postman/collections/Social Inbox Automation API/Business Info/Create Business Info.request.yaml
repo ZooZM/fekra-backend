@@ -1,10 +1,15 @@
 $kind: http-request
 description: |-
-  Creates business info for a client. The controller merges the path `clientId` into the DTO.
+  Creates the business info of a client. **Requires:** `ADMIN` role. A client has at most one.
 
-  **Body:** `CreateBusinessInfoDto`
+  **Body:** `CreateBusinessInfoBodyDto`. Every field is optional. `clientId` is **not needed** in the body (the URL decides); when it is sent it must equal the one in the URL (`422` on `clientId` otherwise). The lists `socialMedia`, `paymentMethods` and `installmentOptions` default to empty.
 
-  > **Note:** The exact body schema lives in the Zod schema referenced by the controller. The example body below is illustrative; adjust the fields to match your schema.
+  Fields: `phone`, `whatsapp` (up to 50 characters), `email` (a valid address), `website` (an `http` or `https` address), `socialMedia` (list of `{ platform, url }`), `location` (`{ city, district, full_address, links }`), `workHours` (one entry per weekday, `sunday` to `saturday`, each `{ startTime, endTime }` as `HH:MM`; a day that is missing means closed), `paymentMethods`, `installmentOptions`. Unknown fields are rejected (`422`).
+
+  **Responses**
+  - `201` the business info.
+  - `409` `DUPLICATE_KEY_ERROR` when the client already has business info (use **Update Business Info By Client**).
+  - `422` `INPUT_VALIDATION_ERROR` for an invalid field or a `clientId` that is not a UUID.
 url: "{{baseUrl}}/business-info/client/:clientId"
 method: POST
 headers:
@@ -15,15 +20,19 @@ body:
   type: json
   content: |-
     {
-      "businessName": "Acme Coffee",
-      "description": "Specialty coffee roaster",
       "phone": "+201000000000",
-      "address": "12 Nile St, Giza",
-      "workingHours": "Sat-Thu 8am-10pm",
-      "website": "https://acmecoffee.com"
+      "email": "hello@acmecoffee.com",
+      "website": "https://acmecoffee.com",
+      "paymentMethods": ["cash", "card"],
+      "installmentOptions": [],
+      "workHours": {
+        "saturday": { "startTime": "09:00", "endTime": "22:00" },
+        "sunday": { "startTime": "09:00", "endTime": "22:00" },
+        "friday": { "startTime": "14:00", "endTime": "22:00" }
+      }
     }
 scripts:
   - type: afterResponse
-    code: pm.test('Status is one of [200, 201]', () => pm.expect([200, 201]).to.include(pm.response.code));
+    code: pm.test('Status is one of [201, 409]', () => pm.expect([201, 409]).to.include(pm.response.code));
     language: text/javascript
 order: 1000

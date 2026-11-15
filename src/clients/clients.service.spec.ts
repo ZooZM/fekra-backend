@@ -259,4 +259,41 @@ describe('ClientsService', () => {
       workflow,
     );
   });
+
+  describe('ownsAccount (feature 004)', () => {
+    const client = { id: 'c1', fbPageId: 'page-1', instaAccountId: 'ig-1' };
+
+    it.each([
+      ['its Facebook page', 'FACEBOOK', 'page-1', true],
+      ['its Instagram account', 'INSTAGRAM', 'ig-1', true],
+      ['another page', 'FACEBOOK', 'page-2', false],
+      ['its Instagram id used as a Facebook page', 'FACEBOOK', 'ig-1', false],
+      [
+        'its page id used as an Instagram account',
+        'INSTAGRAM',
+        'page-1',
+        false,
+      ],
+    ] as const)('is %p → %p', async (_label, platform, accountId, expected) => {
+      repo.findById.mockResolvedValue(client);
+      await expect(
+        service.ownsAccount('c1', platform, accountId),
+      ).resolves.toBe(expected);
+      expect(repo.findById).toHaveBeenCalledWith('c1');
+    });
+
+    it('is false for an unknown client', async () => {
+      repo.findById.mockResolvedValue(null);
+      await expect(
+        service.ownsAccount('c9', 'FACEBOOK', 'page-1'),
+      ).resolves.toBe(false);
+    });
+
+    it('is false when the client has no account on that platform', async () => {
+      repo.findById.mockResolvedValue({ ...client, instaAccountId: null });
+      await expect(
+        service.ownsAccount('c1', 'INSTAGRAM', 'ig-1'),
+      ).resolves.toBe(false);
+    });
+  });
 });

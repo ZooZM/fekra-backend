@@ -1,0 +1,25 @@
+$kind: http-request
+description: |-
+  Resumes the assistant in one conversation. **Requires:** `ADMIN` role (403 otherwise).
+
+  The assistant answers the customer's **next** message. Messages that arrived during the pause stay marked `answered: false` and are not answered afterwards.
+
+  On a conversation that is not paused now (also a timed pause that already ended) this changes nothing and records nothing: it answers `200` with the conversation.
+
+  **Responses**
+  - `200` the conversation with `paused: false`.
+  - `403` `FORBIDDEN` for a `CLIENT` user.
+  - `404` `NOT_FOUND` unknown conversation.
+url: "{{baseUrl}}/chats/:chatId/resume"
+method: POST
+pathVariables:
+  chatId: "{{chatId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 403, 404]', () => pm.expect([200, 403, 404]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        pm.test('The conversation is not paused', () => pm.expect(pm.response.json().paused).to.eql(false));
+      }
+    language: text/javascript
+order: 5000
