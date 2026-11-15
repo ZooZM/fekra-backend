@@ -2189,6 +2189,152 @@
         ],
         "type": "object"
       },
+      "LeadContextDto": {
+        "properties": {
+          "history": {
+            "items": {
+              "properties": {
+                "answered": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "reply": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message",
+                "reply",
+                "answered",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "lead": {
+            "anyOf": [
+              {
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "clientId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "fields": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "lastIntent": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "notifiedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "phone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "platform": {
+                    "enum": [
+                      "FACEBOOK",
+                      "INSTAGRAM"
+                    ],
+                    "type": "string"
+                  },
+                  "senderId": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "updatedAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "clientId",
+                  "platform",
+                  "accountId",
+                  "senderId",
+                  "stage",
+                  "phone",
+                  "country",
+                  "lastIntent",
+                  "summary",
+                  "fields",
+                  "notifiedAt",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lead",
+          "history"
+        ],
+        "type": "object"
+      },
       "PaginatedClientsDto": {
         "properties": {
           "data": {
@@ -3157,6 +3303,200 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "UpsertLeadDto": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[\\w.:-]+$",
+            "type": "string"
+          },
+          "claimNotification": {
+            "default": false,
+            "type": "boolean"
+          },
+          "clientId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "pattern": "^([A-Za-z]{2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "lastIntent": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "phone": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "senderId": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[\\w.:-]+$",
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "summary": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "clientId",
+          "platform",
+          "accountId",
+          "senderId",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "UpsertLeadResultDto": {
+        "properties": {
+          "lead": {
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "clientId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "country": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "fields": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "lastIntent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "notifiedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "platform": {
+                "enum": [
+                  "FACEBOOK",
+                  "INSTAGRAM"
+                ],
+                "type": "string"
+              },
+              "senderId": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "summary": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "clientId",
+              "platform",
+              "accountId",
+              "senderId",
+              "stage",
+              "phone",
+              "country",
+              "lastIntent",
+              "summary",
+              "fields",
+              "notifiedAt",
+              "createdAt",
+              "updatedAt"
+            ],
+            "type": "object"
+          },
+          "notifiedNow": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lead",
+          "notifiedNow"
+        ],
         "type": "object"
       }
     },
@@ -4499,6 +4839,129 @@
         },
         "tags": [
           "N8nCallback"
+        ]
+      }
+    },
+    "/n8n/leads": {
+      "post": {
+        "operationId": "LeadsController_upsert",
+        "parameters": [
+          {
+            "description": "Must equal N8N_WEBHOOK_SECRET",
+            "in": "header",
+            "name": "x-webhook-secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertLeadDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertLeadResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leads"
+        ]
+      }
+    },
+    "/n8n/leads/context": {
+      "get": {
+        "operationId": "LeadsController_context",
+        "parameters": [
+          {
+            "description": "Must equal N8N_WEBHOOK_SECRET",
+            "in": "header",
+            "name": "x-webhook-secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "accountId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "pattern": "^[\\w.:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "senderId",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "pattern": "^[\\w.:-]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "historyLimit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadContextDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "tags": [
+          "Leads"
         ]
       }
     },

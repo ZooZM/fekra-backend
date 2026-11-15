@@ -1,0 +1,51 @@
+$kind: http-request
+description: |-
+  What the workflow knows about one customer on one client account, before it replies.
+
+  **Query:** `clientId` (uuid), `platform` (`facebook` or `instagram`, any case), `accountId` (the client's Page ID or Instagram account ID), `senderId` (the customer: PSID / IGSID), `historyLimit` (1-50, default 10).
+
+  **Responses**
+  - `200` `{ lead, history }`. `lead` is `null` when there is no lead yet. `history` is the last `historyLimit` exchanges of this client's conversation with the customer, **oldest first**, unanswered ones included (`answered: false`, `reply: ""`); `[]` when there is no conversation. Nothing is created.
+  - `401` `UNAUTHORIZED`: missing or wrong `x-webhook-secret`.
+  - `404` `CLIENT_ACCOUNT_NOT_FOUND`: unknown client, or `accountId` is not its account on that platform.
+  - `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors`.
+url: "{{baseUrl}}/n8n/leads/context?clientId={{clientId}}&platform=facebook&accountId={{pageId}}&senderId={{customerId}}&historyLimit=10"
+method: GET
+headers:
+  x-webhook-secret: "{{n8nWebhookSecret}}"
+queryParams:
+  - key: clientId
+    value: "{{clientId}}"
+    disabled: false
+    description: The client (uuid)
+  - key: platform
+    value: facebook
+    disabled: false
+    description: facebook or instagram
+  - key: accountId
+    value: "{{pageId}}"
+    disabled: false
+    description: The client's Page ID (or Instagram account ID)
+  - key: senderId
+    value: "{{customerId}}"
+    disabled: false
+    description: The customer (PSID / IGSID)
+  - key: historyLimit
+    value: "10"
+    disabled: false
+    description: 1-50, default 10
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 401, 404, 422]', () => pm.expect([200, 401, 404, 422]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        const json = pm.response.json();
+        pm.test('Has lead and history', () => {
+          pm.expect(json).to.have.property('lead');
+          pm.expect(json.history).to.be.an('array');
+        });
+      }
+    language: text/javascript
+order: 1000

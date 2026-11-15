@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "1c530d55-62c9-55df-a8ae-e41f4db4c437",
     "name": "Social Inbox Automation API",
-    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, n8n callback and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `postId`, `nextCursor` | Saved by **Clients → List Client Posts**: the first post's id and the next page's cursor |\n| `runId` | Saved by **Inbox → Backfill Unanswered Comments**: the reply run's id |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
+    "description": "Postman collection for the NestJS backend (clients, business info, offers, services, users, auth, conversations, comments, n8n callback, n8n data and Meta webhooks).\n\n## Getting started\n1. Set the `baseUrl` collection variable (default `http://localhost:3000`).\n2. Run **Auth → Login** (set `userEmail` first). The token is saved to `accessToken` automatically.\n3. Every other request inherits **Bearer {{accessToken}}** from the collection, except those marked *No Auth* (auth, n8n callback, n8n data, Meta webhooks).\n4. Create requests save ids into `clientId`, `offerId`, `serviceId`, `resourceId` where applicable. Requests using `:id` use `{{resourceId}}`: copy the relevant id into it.\n\n## Variables\n| Variable | Purpose |\n|---|---|\n| `baseUrl` | API root |\n| `accessToken` | JWT (auto-filled on login) |\n| `userEmail` | Email for login / user lookup |\n| `appOrigin` | Origin header for `/auth/refresh` and `/auth/logout`; must equal server `APP_ORIGIN` |\n| `clientId`, `offerId`, `serviceId`, `resourceId` | Resource ids |\n| `postId`, `nextCursor` | Saved by **Clients → List Client Posts**: the first post's id and the next page's cursor |\n| `runId` | Saved by **Inbox → Backfill Unanswered Comments**: the reply run's id |\n| `n8nWebhookSecret` | Must equal server `N8N_WEBHOOK_SECRET` (n8n callback and n8n data) |\n| `customerId` | A customer id (PSID / IGSID) for the conversation filters and the n8n data requests |\n| `metaVerifyToken` | Must equal server webhook verify token |\n| `metaAppSecret` | Meta app secret used to sign webhook payloads |\n| `pageId`, `igAccountId` | Ids used in sample webhook payloads |\n\n## Notes\n- Request body schemas (Zod DTOs) were not provided, so example bodies are illustrative. Adjust them to your schemas.\n- Roles: `PUT /clients/:id/access-token` and `POST /inbox/comments/backfill` enforce `ADMIN` via `RolesGuard`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -750,7 +750,7 @@
                 }
               ]
             },
-            "description": "Updates a client. **Requires:** `ADMIN` role.\n\n**Body:** `UpdateClientDto`. `version` is required: send the version you loaded. Any other field is optional; only send what changed.\n\n**`accessToken` is no longer accepted here** (422). Use *Set Client Access Token*.\n\n**Responses**\n- `200` the updated client with `version` + 1 and an `UPDATED` activity entry listing the changed field names. Identical values change nothing (version stays).\n- `409` `CLIENT_VERSION_CONFLICT` when `version` is stale: `details` has `currentVersion`, `updatedAt` and `updatedBy` (who saved last).\n\n  ```json\n  { \"statusCode\": 409, \"errorCode\": \"CLIENT_VERSION_CONFLICT\",\n    \"details\": { \"currentVersion\": 4, \"updatedAt\": \"2026-03-01T10:30:00.000Z\", \"updatedBy\": { \"id\": \"…\", \"name\": \"Sara\" } } }\n  ```\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` when the account id belongs to another client, **or** when `chatWorkflowEndpoint` is already used by another client (`details.field = \"chatWorkflowEndpoint\"`).\n- `404` unknown client, `422` invalid body or missing `version`.\n\n**Chat service (feature 003).** `chatWorkflowEndpoint` is one path segment (`^[A-Za-z0-9_-]{1,100}$`) that is added to the fixed `N8N_BASE_URL`; `null` clears it. `chatSubscribed` switches the chat service on or off. Only a subscribed client has its private messages handed to its workflow; the DMs of a client that is not subscribed are ignored and not stored.\n- `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors.chatWorkflowEndpoint` when the format is wrong, when you subscribe a client that has no endpoint, or when you clear the endpoint of a subscribed client (unsubscribe first).\n- Unsubscribing keeps the endpoint. Both fields appear in the activity entry by name, never by value."
+            "description": "Updates a client. **Requires:** `ADMIN` role.\n\n**Body:** `UpdateClientDto`. `version` is required: send the version you loaded. Any other field is optional; only send what changed.\n\n**`accessToken` is no longer accepted here** (422). Use *Set Client Access Token*.\n\n**Responses**\n- `200` the updated client with `version` + 1 and an `UPDATED` activity entry listing the changed field names. Identical values change nothing (version stays).\n- `409` `CLIENT_VERSION_CONFLICT` when `version` is stale: `details` has `currentVersion`, `updatedAt` and `updatedBy` (who saved last).\n\n  ```json\n  { \"statusCode\": 409, \"errorCode\": \"CLIENT_VERSION_CONFLICT\",\n    \"details\": { \"currentVersion\": 4, \"updatedAt\": \"2026-03-01T10:30:00.000Z\", \"updatedBy\": { \"id\": \"…\", \"name\": \"Sara\" } } }\n  ```\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` when the account id belongs to another client.\n- `404` unknown client, `422` invalid body or missing `version`.\n\n**Chat service (feature 003).** `chatWorkflowEndpoint` is one path segment (`^[A-Za-z0-9_-]{1,100}$`) that is added to the fixed `N8N_BASE_URL`; `null` clears it. Several clients may use the same endpoint (one shared workflow, feature 004). `chatSubscribed` switches the chat service on or off. Only a subscribed client has its private messages handed to its workflow; the DMs of a client that is not subscribed are ignored and not stored.\n- `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors.chatWorkflowEndpoint` when the format is wrong, when you subscribe a client that has no endpoint, or when you clear the endpoint of a subscribed client (unsubscribe first).\n- Unsubscribing keeps the endpoint. Both fields appear in the activity entry by name, never by value."
           },
           "response": []
         },
@@ -995,7 +995,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"+201000000000\",\n  \"email\": \"hello@acmecoffee.com\",\n  \"website\": \"https://acmecoffee.com\",\n  \"paymentMethods\": [\"cash\", \"card\"],\n  \"installmentOptions\": [],\n  \"workHours\": { \"startTime\": \"09:00\", \"endTime\": \"22:00\", \"days\": [\"saturday\", \"sunday\", \"monday\"] }\n}",
+              "raw": "{\n  \"phone\": \"+201000000000\",\n  \"email\": \"hello@acmecoffee.com\",\n  \"website\": \"https://acmecoffee.com\",\n  \"paymentMethods\": [\"cash\", \"card\"],\n  \"installmentOptions\": [],\n  \"workHours\": {\n    \"saturday\": { \"startTime\": \"09:00\", \"endTime\": \"22:00\" },\n    \"sunday\": { \"startTime\": \"09:00\", \"endTime\": \"22:00\" },\n    \"friday\": { \"startTime\": \"14:00\", \"endTime\": \"22:00\" }\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1019,7 +1019,7 @@
                 }
               ]
             },
-            "description": "Creates the business info of a client. **Requires:** `ADMIN` role. A client has at most one.\n\n**Body:** `CreateBusinessInfoBodyDto`. Every field is optional. `clientId` is **not needed** in the body (the URL decides); when it is sent it must equal the one in the URL (`422` on `clientId` otherwise). The lists `socialMedia`, `paymentMethods` and `installmentOptions` default to empty.\n\nFields: `phone`, `whatsapp` (up to 50 characters), `email` (a valid address), `website` (an `http` or `https` address), `socialMedia` (list of `{ platform, url }`), `location` (`{ city, district, full_address, links }`), `workHours` (`{ startTime, endTime, days }`), `paymentMethods`, `installmentOptions`. Unknown fields are rejected (`422`).\n\n**Responses**\n- `201` the business info.\n- `409` `DUPLICATE_KEY_ERROR` when the client already has business info (use **Update Business Info By Client**).\n- `422` `INPUT_VALIDATION_ERROR` for an invalid field or a `clientId` that is not a UUID."
+            "description": "Creates the business info of a client. **Requires:** `ADMIN` role. A client has at most one.\n\n**Body:** `CreateBusinessInfoBodyDto`. Every field is optional. `clientId` is **not needed** in the body (the URL decides); when it is sent it must equal the one in the URL (`422` on `clientId` otherwise). The lists `socialMedia`, `paymentMethods` and `installmentOptions` default to empty.\n\nFields: `phone`, `whatsapp` (up to 50 characters), `email` (a valid address), `website` (an `http` or `https` address), `socialMedia` (list of `{ platform, url }`), `location` (`{ city, district, full_address, links }`), `workHours` (one entry per weekday, `sunday` to `saturday`, each `{ startTime, endTime }` as `HH:MM`; a day that is missing means closed), `paymentMethods`, `installmentOptions`. Unknown fields are rejected (`422`).\n\n**Responses**\n- `201` the business info.\n- `409` `DUPLICATE_KEY_ERROR` when the client already has business info (use **Update Business Info By Client**).\n- `422` `INPUT_VALIDATION_ERROR` for an invalid field or a `clientId` that is not a UUID."
           },
           "response": []
         },
@@ -1110,7 +1110,7 @@
                 }
               ]
             },
-            "description": "Updates the business info of a client. **Requires:** `ADMIN` role.\n\n**Body:** a **partial** update (`UpdateBusinessInfoBodyDto`): a field that is not sent stays unchanged, and `null` clears a nullable field (`phone`, `email`, `whatsapp`, `website`, `location`, `workHours`). At least one field is required. `clientId` is optional in the body; when it is sent it must equal the one in the URL (`422` on `clientId` otherwise).\n\nFields: `phone`, `whatsapp` (up to 50 characters), `email` (a valid address), `website` (an `http` or `https` address), `socialMedia` (list of `{ platform, url }`), `location` (`{ city, district, full_address, links }`), `workHours` (`{ startTime, endTime, days }`), `paymentMethods` and `installmentOptions` (lists without duplicates).\n\n> Before feature 003 this request needed `clientId` in the body and reset every list that was not sent. It no longer does either.\n\n**Responses**\n- `200` the updated business info.\n- `404` `NOT_FOUND` when the client has no business info yet (use **Create Business Info**).\n- `422` `INPUT_VALIDATION_ERROR` for an invalid field, an empty body, a `clientId` that is not a UUID or that differs from the URL."
+            "description": "Updates the business info of a client. **Requires:** `ADMIN` role.\n\n**Body:** a **partial** update (`UpdateBusinessInfoBodyDto`): a field that is not sent stays unchanged, and `null` clears a nullable field (`phone`, `email`, `whatsapp`, `website`, `location`, `workHours`). At least one field is required. `clientId` is optional in the body; when it is sent it must equal the one in the URL (`422` on `clientId` otherwise).\n\nFields: `phone`, `whatsapp` (up to 50 characters), `email` (a valid address), `website` (an `http` or `https` address), `socialMedia` (list of `{ platform, url }`), `location` (`{ city, district, full_address, links }`), `workHours` (one entry per weekday, `sunday` to `saturday`, each `{ startTime, endTime }` as `HH:MM`; a day that is missing means closed), `paymentMethods` and `installmentOptions` (lists without duplicates).\n\n> Before feature 003 this request needed `clientId` in the body and reset every list that was not sent. It no longer does either.\n\n**Responses**\n- `200` the updated business info.\n- `404` `NOT_FOUND` when the client has no business info yet (use **Create Business Info**).\n- `422` `INPUT_VALIDATION_ERROR` for an invalid field, an empty body, a `clientId` that is not a UUID or that differs from the URL."
           },
           "response": []
         },
@@ -1828,6 +1828,203 @@
               ]
             },
             "description": "Negative test: wrong secret returns 401."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "id": "4627c137-f875-51fe-ad19-91617bd5fdd8",
+      "name": "n8n Data",
+      "description": "Data endpoints for the n8n chat workflows (feature 004): read a conversation's lead and history, and save the lead after every reply. n8n never touches the database directly.\n\n**No JWT.** Every request carries the `x-webhook-secret` header, which must equal the server's `N8N_WEBHOOK_SECRET` (the `n8nWebhookSecret` variable here). A missing or wrong secret answers `401 UNAUTHORIZED` before the input is read.\n\nEvery request is scoped to one client: `accountId` must be that client's account on `platform` (`fbPageId` for `facebook`, `instaAccountId` for `instagram`), otherwise `404 CLIENT_ACCOUNT_NOT_FOUND`. Set `clientId`, `pageId` and `customerId` first.",
+      "item": [
+        {
+          "id": "733d1458-e175-5e6b-afa5-bc9643e04286",
+          "name": "Get Lead Context",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 401, 404, 422]', () => pm.expect([200, 401, 404, 422]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Has lead and history', () => {",
+                  "    pm.expect(json).to.have.property('lead');",
+                  "    pm.expect(json.history).to.be.an('array');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "{{n8nWebhookSecret}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/n8n/leads/context?clientId={{clientId}}&platform=facebook&accountId={{pageId}}&senderId={{customerId}}&historyLimit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "leads",
+                "context"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "{{clientId}}",
+                  "description": "The client (uuid)"
+                },
+                {
+                  "key": "platform",
+                  "value": "facebook",
+                  "description": "facebook or instagram"
+                },
+                {
+                  "key": "accountId",
+                  "value": "{{pageId}}",
+                  "description": "The client's Page ID (or Instagram account ID)"
+                },
+                {
+                  "key": "senderId",
+                  "value": "{{customerId}}",
+                  "description": "The customer (PSID / IGSID)"
+                },
+                {
+                  "key": "historyLimit",
+                  "value": "10",
+                  "description": "1-50, default 10"
+                }
+              ]
+            },
+            "description": "What the workflow knows about one customer on one client account, before it replies.\n\n**Query:** `clientId` (uuid), `platform` (`facebook` or `instagram`, any case), `accountId` (the client's Page ID or Instagram account ID), `senderId` (the customer: PSID / IGSID), `historyLimit` (1-50, default 10).\n\n**Responses**\n- `200` `{ lead, history }`. `lead` is `null` when there is no lead yet. `history` is the last `historyLimit` exchanges of this client's conversation with the customer, **oldest first**, unanswered ones included (`answered: false`, `reply: \"\"`); `[]` when there is no conversation. Nothing is created.\n- `401` `UNAUTHORIZED`: missing or wrong `x-webhook-secret`.\n- `404` `CLIENT_ACCOUNT_NOT_FOUND`: unknown client, or `accountId` is not its account on that platform.\n- `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors`."
+          },
+          "response": []
+        },
+        {
+          "id": "7878d1ab-1536-5bc6-aabb-1b69278bd1ab",
+          "name": "Upsert Lead",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [200, 401, 404, 422]', () => pm.expect([200, 401, 404, 422]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Has the lead and notifiedNow', () => {",
+                  "    pm.expect(json.lead).to.have.property('id');",
+                  "    pm.expect(json.notifiedNow).to.be.a('boolean');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "{{n8nWebhookSecret}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"platform\": \"facebook\",\n  \"accountId\": \"{{pageId}}\",\n  \"senderId\": \"{{customerId}}\",\n  \"stage\": \"phone_captured\",\n  \"phone\": \"01000000000\",\n  \"country\": \"EG\",\n  \"lastIntent\": \"pricing\",\n  \"summary\": \"Clothes brand, asks for ad management pricing.\",\n  \"fields\": { \"industry\": \"clothes\", \"page_link\": \"\" },\n  \"claimNotification\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "leads"
+              ]
+            },
+            "description": "Saves what the workflow learned after a reply. Creates the lead or merges into it, in one transaction, keyed on (`platform`, `accountId`, `senderId`).\n\n**Body** (unknown keys are refused): `clientId`, `platform`, `accountId`, `senderId`, `stage` (1-50, required), `phone` (max 30), `country` (2 letters, stored upper-case), `lastIntent` (max 50), `summary` (max 1000), `fields` (flat object of strings: at most 30 keys, keys max 50, values max 500), `claimNotification` (boolean, default `false`). `phone`, `country`, `lastIntent` and `summary` may be `null` or `\"\"`.\n\n**Merge rules**\n- `fields`: shallow merge. A non-empty value overwrites; an empty string never erases a stored value (and is not stored).\n- `phone`, `country`, `lastIntent`, `summary`: `null`, a missing key or `\"\"` keep the stored value.\n- `stage`: always the sent value.\n- `claimNotification: true` sets `notifiedAt` only if it is still empty. `notifiedNow` is `true` only for the request that set it, even when several arrive at once: notify the client only then.\n\n**Responses**\n- `200` `{ lead, notifiedNow }`.\n- `401` `UNAUTHORIZED`: missing or wrong `x-webhook-secret` (checked before the body).\n- `404` `CLIENT_ACCOUNT_NOT_FOUND`: unknown client, or `accountId` is not its account on that platform. Nothing is saved.\n- `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors`. Nothing is saved."
+          },
+          "response": []
+        },
+        {
+          "id": "46016389-9fe8-586e-adeb-c1bf4fef8e83",
+          "name": "Upsert Lead: Invalid secret (expect 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is one of [401]', () => pm.expect([401]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-webhook-secret",
+                "value": "wrong",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"platform\": \"facebook\",\n  \"accountId\": \"{{pageId}}\",\n  \"senderId\": \"{{customerId}}\",\n  \"stage\": \"new\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/n8n/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "n8n",
+                "leads"
+              ]
+            },
+            "description": "Negative test: a wrong secret returns 401 before the body is read."
           },
           "response": []
         }
@@ -2823,6 +3020,11 @@
     {
       "key": "n8nWebhookSecret",
       "value": "change-me",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "7000000000000001",
       "type": "string"
     },
     {

@@ -1,0 +1,8 @@
+$kind: collection
+description: |-
+  Data endpoints for the n8n chat workflows (feature 004): read a conversation's lead and history, and save the lead after every reply. n8n never touches the database directly.
+
+  **No JWT.** Every request carries the `x-webhook-secret` header, which must equal the server's `N8N_WEBHOOK_SECRET` (the `n8nWebhookSecret` variable here). A missing or wrong secret answers `401 UNAUTHORIZED` before the input is read.
+
+  Every request is scoped to one client: `accountId` must be that client's account on `platform` (`fbPageId` for `facebook`, `instaAccountId` for `instagram`), otherwise `404 CLIENT_ACCOUNT_NOT_FOUND`. Set `clientId`, `pageId` and `customerId` first.
+order: 7100

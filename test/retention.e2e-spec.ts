@@ -103,6 +103,20 @@ describe('Data retention (e2e)', () => {
       },
     });
 
+    // leads (phone numbers, feature 004): counted from their last update
+    const lead = (senderId: string, updatedAt: Date) => ({
+      clientId,
+      platform: 'FACEBOOK' as const,
+      accountId: 'page-r',
+      senderId,
+      phone: '01012345678',
+      createdAt: updatedAt,
+      updatedAt,
+    });
+    await prisma.lead.createMany({
+      data: [lead('old-lead', monthsAgo(13)), lead('new-lead', monthsAgo(11))],
+    });
+
     await app.get(RetentionService).runOnce();
 
     expect(await prisma.chat.findUnique({ where: { id: idle.id } })).toBeNull();
@@ -127,6 +141,9 @@ describe('Data retention (e2e)', () => {
     expect(comments.map((c) => c.commentId)).toEqual(['new-comment']);
 
     expect(await prisma.commentExportRecord.count()).toBe(1);
+
+    const leads = await prisma.lead.findMany({ select: { senderId: true } });
+    expect(leads.map((l) => l.senderId)).toEqual(['new-lead']);
   });
 
   it('does nothing the second time, and keeps what is inside the period', async () => {
@@ -134,6 +151,7 @@ describe('Data retention (e2e)', () => {
       chats: await prisma.chat.count(),
       exchanges: await prisma.messageReply.count(),
       comments: await prisma.commentReply.count(),
+      leads: await prisma.lead.count(),
     };
 
     await app.get(RetentionService).runOnce();
@@ -142,6 +160,7 @@ describe('Data retention (e2e)', () => {
       chats: await prisma.chat.count(),
       exchanges: await prisma.messageReply.count(),
       comments: await prisma.commentReply.count(),
+      leads: await prisma.lead.count(),
     }).toEqual(before);
   });
 
