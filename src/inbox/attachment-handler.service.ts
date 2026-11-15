@@ -37,6 +37,11 @@ function normalizeAudioMime(contentType: string | null, url: string): string {
   if (path.endsWith('.aac')) return 'audio/aac';
   return 'audio/mp4';
 }
+/** The names of the client's services for the prompts (the records themselves print as [object Object]). */
+function serviceNames(services: { name: string }[] | undefined): string[] {
+  return Array.isArray(services) ? services.map((s) => s.name) : [];
+}
+
 @Injectable()
 export class AttachmentHandlerService {
   private readonly logger = new Logger(AttachmentHandlerService.name);
@@ -93,7 +98,7 @@ LIKELY_INTENT: ...
       return null;
     }
     const aiConfig = business.aiConfig;
-    const services = business.services;
+    const services = serviceNames(business.services);
 
     const language =
       aiConfig.language === 'ENGLISH'
@@ -121,8 +126,9 @@ If the item looks related to one of these products, say which one it looks close
   }
   /** Return text to add to the sender's batch (a description, extracted text...), or null to add nothing. */
   async handleImage(ctx: AttachmentContext): Promise<string | null> {
-    this.logger.log(
-      `analys image from: ${ctx.platform}, mid: ${ctx.senderId}, senderId: ${ctx.senderId}, imageUrl: ${ctx.url}`,
+    // customer media and content stay at debug, which is off in production (constitution VIII)
+    this.logger.debug(
+      `analyse image from: ${ctx.platform}, mid: ${ctx.mid}, senderId: ${ctx.senderId}, imageUrl: ${ctx.url}`,
     );
     try {
       const response = await fetch(ctx.url);
@@ -158,7 +164,7 @@ If the item looks related to one of these products, say which one it looks close
       ]);
 
       const textResponse = result.response.text();
-      this.logger.log(`[Image Attachment]: ${textResponse}`);
+      this.logger.debug(`[Image Attachment]: ${textResponse}`);
       return `[Image Attachment]: ${textResponse}`;
     } catch (error) {
       this.logger.error(`Error handling image for mid ${ctx.mid}:`, error);
@@ -210,9 +216,7 @@ LIKELY_INTENT: ...
       return null;
     }
     const aiConfig = business.aiConfig;
-    const services = Array.isArray(business?.['services'])
-      ? business['services']
-      : [];
+    const services = serviceNames(business.services);
 
     const language =
       aiConfig.language === 'ENGLISH'
@@ -237,7 +241,7 @@ If the customer mentions one of these names, spell it exactly as written here.`;
   }
   /** Return text to add to the sender's batch (a transcript...), or null to add nothing. */
   async handleVoiceRecord(ctx: AttachmentContext): Promise<string | null> {
-    this.logger.log(
+    this.logger.debug(
       `transcribe voice from: ${ctx.platform}, senderId: ${ctx.senderId}, audioUrl: ${ctx.url}`,
     );
 
@@ -292,7 +296,7 @@ If the customer mentions one of these names, spell it exactly as written here.`;
 
       const transcription = result.response.text().trim();
       if (!transcription) throw new Error('Empty transcription');
-      this.logger.log(`[رسالة صوتية]\n${transcription}`);
+      this.logger.debug(`[رسالة صوتية]\n${transcription}`);
       return `[رسالة صوتية]\n${transcription}`;
     } catch (error) {
       this.logger.error(

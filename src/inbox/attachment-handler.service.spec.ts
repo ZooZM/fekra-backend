@@ -32,8 +32,12 @@ describe('AttachmentHandlerService', () => {
     (getGenerativeModel.mock.calls[0][0] as { systemInstruction: string })
       .systemInstruction;
 
+  let log: jest.SpyInstance;
+  let debug: jest.SpyInstance;
+
   beforeEach(() => {
-    jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     clients = {
       getClientDataForWorkFlow: jest.fn().mockResolvedValue({
@@ -84,5 +88,41 @@ describe('AttachmentHandlerService', () => {
 
     await expect(service.handleVoiceRecord(ctx)).resolves.toBeNull();
     expect(getGenerativeModel).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['voice', 'buildVoicePrompt'],
+    ['image', 'buildImagePrompt'],
+  ] as const)(
+    'lists the service names in the %s prompt, not [object Object]',
+    async (_kind, build) => {
+      clients.getClientDataForWorkFlow.mockResolvedValue({
+        name: 'Acme',
+        businessCategory: 'Furniture',
+        aiConfig: { language: 'ARABIC' },
+        services: [
+          { id: 's1', name: 'Corner Sofa' },
+          { id: 's2', name: 'Dining Table' },
+        ],
+      });
+
+      const prompt = (await service[build](ctx)) as string;
+
+      expect(prompt).toContain('Corner Sofa | Dining Table');
+      expect(prompt).not.toContain('[object Object]');
+    },
+  );
+
+  it('keeps customer content (transcripts, descriptions, media URLs) out of the log level', async () => {
+    fetchSpy.mockResolvedValue(fetched('audio/ogg'));
+    await service.handleVoiceRecord(ctx);
+    fetchSpy.mockResolvedValue(fetched('image/jpeg'));
+    await service.handleImage(ctx);
+
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).not.toContain('TRANSCRIPT');
+    expect(logged).not.toContain(ctx.url);
+    // still available when debugging, which is off in production
+    expect(JSON.stringify(debug.mock.calls)).toContain('TRANSCRIPT');
   });
 });
