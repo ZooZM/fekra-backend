@@ -1,0 +1,53 @@
+$kind: http-request
+description: |-
+  Saves what the workflow learned after a reply. Creates the lead or merges into it, in one transaction, keyed on (`platform`, `accountId`, `senderId`).
+
+  **Body** (unknown keys are refused): `clientId`, `platform`, `accountId`, `senderId`, `stage` (1-50, required), `phone` (max 30), `country` (2 letters, stored upper-case), `lastIntent` (max 50), `summary` (max 1000), `fields` (flat object of strings: at most 30 keys, keys max 50, values max 500), `claimNotification` (boolean, default `false`). `phone`, `country`, `lastIntent` and `summary` may be `null` or `""`.
+
+  **Merge rules**
+  - `fields`: shallow merge. A non-empty value overwrites; an empty string never erases a stored value (and is not stored).
+  - `phone`, `country`, `lastIntent`, `summary`: `null`, a missing key or `""` keep the stored value.
+  - `stage`: always the sent value.
+  - `claimNotification: true` sets `notifiedAt` only if it is still empty. `notifiedNow` is `true` only for the request that set it, even when several arrive at once: notify the client only then.
+
+  **Responses**
+  - `200` `{ lead, notifiedNow }`.
+  - `401` `UNAUTHORIZED`: missing or wrong `x-webhook-secret` (checked before the body).
+  - `404` `CLIENT_ACCOUNT_NOT_FOUND`: unknown client, or `accountId` is not its account on that platform. Nothing is saved.
+  - `422` `INPUT_VALIDATION_ERROR` with `details.fieldErrors`. Nothing is saved.
+url: "{{baseUrl}}/n8n/leads"
+method: POST
+headers:
+  x-webhook-secret: "{{n8nWebhookSecret}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "clientId": "{{clientId}}",
+      "platform": "facebook",
+      "accountId": "{{pageId}}",
+      "senderId": "{{customerId}}",
+      "stage": "phone_captured",
+      "phone": "01000000000",
+      "country": "EG",
+      "lastIntent": "pricing",
+      "summary": "Clothes brand, asks for ad management pricing.",
+      "fields": { "industry": "clothes", "page_link": "" },
+      "claimNotification": true
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 401, 404, 422]', () => pm.expect([200, 401, 404, 422]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        const json = pm.response.json();
+        pm.test('Has the lead and notifiedNow', () => {
+          pm.expect(json.lead).to.have.property('id');
+          pm.expect(json.notifiedNow).to.be.a('boolean');
+        });
+      }
+    language: text/javascript
+order: 2000

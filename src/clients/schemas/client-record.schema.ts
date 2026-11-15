@@ -19,6 +19,8 @@ export const ClientRecordSchema = z.object({
   aiConfig: AiConfigSchema,
   dmReplyConfig: DmReplyConfigSchema,
   commentReplyConfig: CommentReplyConfigSchema,
+  chatWorkflowEndpoint: z.string().nullable(),
+  chatSubscribed: z.boolean(),
   version: z.number().int(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

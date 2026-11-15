@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   IClientsRepository,
@@ -12,6 +13,7 @@ import { PaginatedResult } from '@app/common/helpers/pagination.helper';
 import { TokenCryptoService } from '@app/crypto/token-crypto.service';
 import { CreateClientInput, UpdateClientInput } from './schemas/client.schema';
 import {
+  ChatRoute,
   ClientActor,
   ClientRecord,
   ClientRef,
@@ -20,6 +22,7 @@ import {
 } from './types/client.types';
 import { ReplyRunActivityDetails } from '@common/zod/json-columns.schema';
 import { randomUUID } from 'crypto';
+import { Platform } from '@app/generated/prisma/client';
 import { QueryClientInput } from './schemas/query-client.schema';
 
 @Injectable()
@@ -63,6 +66,7 @@ export class ClientsService {
   ): Promise<ClientRecord> {
     const { version, ...data } = input;
     await this.assertAccountsFree(data, id);
+    await this.assertChatService(id, data);
     const result = await this.repo.update(id, data, version, actor);
     if (!result) throw new NotFoundException('Client not found');
     if (result.status === 'conflict') {
@@ -82,11 +86,43 @@ export class ClientsService {
     }
   }
 
+  /**
+   * True when the client exists and `accountId` is its account on that platform: the Facebook
+   * page id or the Instagram account id. Read fresh (never cached), because the n8n lead endpoints
+   * scope every read and write with it (feature 004).
+   */
+  async ownsAccount(
+    clientId: string,
+    platform: Platform,
+    accountId: string,
+  ): Promise<boolean> {
+    const client = await this.repo.findById(clientId);
+    if (!client) return false;
+    const owned =
+      platform === 'FACEBOOK' ? client.fbPageId : client.instaAccountId;
+    return owned !== null && owned === accountId;
+  }
+
   /** Null when there's no match, so webhook code can drop the event. Throw a 404 in a controller if an endpoint needs one. */
   getClientDataForWorkFlow(
     brandId: string,
   ): Promise<ClientWorkflowData | null> {
     return this.repo.getClientDataForWorkFlow(brandId);
+  }
+
+  /** The chat route by account id, read fresh (the cache is only an outage fallback). */
+  findChatRoute(accountId: string): Promise<ChatRoute | null> {
+    return this.repo.findChatRoute(accountId);
+  }
+
+  /** The chat route by client id, read fresh on every delivery attempt. */
+  findChatRouteById(clientId: string): Promise<ChatRoute | null> {
+    return this.repo.findChatRouteById(clientId);
+  }
+
+  /** Client, services, offers and business info for a DM batch, database first. */
+  findWorkflowDataFresh(accountId: string): Promise<ClientWorkflowData | null> {
+    return this.repo.findWorkflowDataFresh(accountId);
   }
 
   async setAccessToken(
@@ -119,6 +155,48 @@ export class ClientsService {
   async getAccessToken(clientId: string): Promise<string | null> {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
+  }
+
+  /**
+   * An edit may send only one of the two chat fields, so the rule "subscribed needs an endpoint"
+   * is checked on the merged state. Several clients may use the same endpoint: a workflow can be
+   * shared, and tells its clients apart by the client id in each request (feature 004). The version check in the repository protects this
+   * read-merge-write: a concurrent edit changes the version and the save is refused.
+   */
+  private async assertChatService(
+    id: string,
+    data: { chatWorkflowEndpoint?: string | null; chatSubscribed?: boolean },
+  ): Promise<void> {
+    if (
+      data.chatWorkflowEndpoint === undefined &&
+      data.chatSubscribed === undefined
+    ) {
+      return;
+    }
+    const current = await this.repo.findById(id);
+    if (!current) throw new NotFoundException('Client not found');
+
+    const endpoint =
+      data.chatWorkflowEndpoint !== undefined
+        ? data.chatWorkflowEndpoint
+        : current.chatWorkflowEndpoint;
+    const subscribed = data.chatSubscribed ?? current.chatSubscribed;
+    if (subscribed && !endpoint) {
+      throw new UnprocessableEntityException({
+        message: 'Validation failed',
+        errorCode: 'INPUT_VALIDATION_ERROR',
+        details: {
+          formErrors: [],
+          fieldErrors: {
+            chatWorkflowEndpoint: [
+              data.chatWorkflowEndpoint === null
+                ? 'Unsubscribe the client before removing its endpoint'
+                : 'Enter an endpoint before subscribing the client to the chat service',
+            ],
+          },
+        },
+      });
+    }
   }
 
   /** A Facebook page / Instagram account can belong to one client only (webhooks match on it). */

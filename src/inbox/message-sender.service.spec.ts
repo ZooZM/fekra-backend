@@ -23,6 +23,8 @@ describe('MessageSenderService', () => {
   let conversations: {
     findOrCreate: jest.Mock;
     createMessage: jest.Mock;
+    createUnansweredMessage: jest.Mock;
+    isPaused: jest.Mock;
   };
 
   beforeEach(() => {
@@ -35,6 +37,8 @@ describe('MessageSenderService', () => {
     conversations = {
       findOrCreate: jest.fn().mockResolvedValue({ id: 'chat-1' }),
       createMessage: jest.fn().mockResolvedValue(undefined),
+      createUnansweredMessage: jest.fn().mockResolvedValue(undefined),
+      isPaused: jest.fn().mockReturnValue(false),
     };
     service = new MessageSenderService(
       graph as unknown as GraphApiService,
@@ -66,6 +70,88 @@ describe('MessageSenderService', () => {
       message: 'customer message\nfollow-up',
       reply: 'hello',
     });
+  });
+
+  describe('a request that was pending before clientId travelled with it', () => {
+    const legacy = {
+      ...request,
+      clientId: undefined,
+    } as unknown as SendableRequest;
+
+    it('uses the id of its client to record the exchange', async () => {
+      await service.reply(legacy, 'hello');
+
+      expect(conversations.findOrCreate).toHaveBeenCalledWith({
+        clientId: 'client-1',
+        platform: 'facebook',
+        senderId: 'user-1',
+        receiverId: 'page-1',
+      });
+      expect(conversations.createMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('still honours a pause, instead of failing open on the missing id', async () => {
+      conversations.isPaused.mockReturnValue(true);
+
+      await service.reply(legacy, 'hello');
+
+      expect(graph.post).not.toHaveBeenCalled();
+      expect(conversations.createUnansweredMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when an administrator paused the conversation (checkpoint 4)', () => {
+    beforeEach(() => conversations.isPaused.mockReturnValue(true));
+
+    it('does not send the reply and stores the batch as unanswered', async () => {
+      await service.reply(request, 'hello');
+
+      expect(graph.post).not.toHaveBeenCalled();
+      expect(graph.deadLetter).not.toHaveBeenCalled();
+      expect(conversations.createMessage).not.toHaveBeenCalled();
+      expect(conversations.createUnansweredMessage).toHaveBeenCalledWith({
+        chatId: 'chat-1',
+        message: 'customer message\nfollow-up',
+      });
+    });
+
+    it('checks the pause on the chat it just read, so a timed pause that ended is not paused', async () => {
+      conversations.isPaused.mockReturnValue(false);
+      await service.reply(request, 'hello');
+      expect(conversations.isPaused).toHaveBeenCalledWith({ id: 'chat-1' });
+      expect(graph.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw when the unanswered batch cannot be stored', async () => {
+      conversations.createUnansweredMessage.mockRejectedValue(
+        new Error('database down'),
+      );
+      await expect(service.reply(request, 'hello')).resolves.toBeUndefined();
+      expect(graph.post).not.toHaveBeenCalled();
+    });
+  });
+
+  it('sends the reply anyway when the pause cannot be checked (fails open)', async () => {
+    conversations.findOrCreate.mockRejectedValue(new Error('database down'));
+
+    await service.reply(request, 'hello');
+
+    expect(graph.post).toHaveBeenCalledTimes(1);
+    expect(conversations.createUnansweredMessage).not.toHaveBeenCalled();
+  });
+
+  it('never logs the client data or the message text above debug', async () => {
+    const log = jest
+      .spyOn(
+        (service as unknown as { logger: { log: () => void } }).logger,
+        'log',
+      )
+      .mockImplementation();
+    await service.reply(request, 'a private reply');
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).not.toContain('private reply');
+    expect(logged).not.toContain('customer message');
+    expect(logged).not.toContain('"client"');
   });
 
   it('splits messages at the platform limit', async () => {

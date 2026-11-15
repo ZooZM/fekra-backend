@@ -7,6 +7,7 @@ import {
   SendableRequest,
 } from './graph-api.service';
 import { ConversationsService } from '@app/conversations/conversations.service';
+import { Chat } from '@app/generated/prisma/client';
 
 const DM_LIMIT = 2000; // Messenger text limit per message
 
@@ -24,8 +25,12 @@ export class MessageSenderService {
   /** Never throws, so callers can use `void sender.reply(...)`. */
   async reply(req: SendableRequest, text: string): Promise<void> {
     let messages: NonNullable<SendableRequest['messages']>;
+    // The client of the request, not req.clientId: a request that was pending in Redis when this
+    // release started was written without that field, and its client is always there.
+    let clientId = req.clientId ?? req.client?.id;
     try {
       if (!req.client) throw new GraphError('client is missing', false);
+      clientId = req.client.id;
       const token = await this.clients.getAccessToken(req.client.id);
       if (!token)
         throw new GraphError('No access token stored for this client', false);
@@ -35,7 +40,14 @@ export class MessageSenderService {
       }
       messages = req.messages;
 
-      this.logger.log(req.client);
+      // Checkpoint 4 (research R2): the workflow can take a while, so an administrator may have
+      // paused the conversation after the message was handed over. Nothing is sent then.
+      const pausedChat = await this.findPausedChat(req, clientId);
+      if (pausedChat) {
+        await this.recordUnanswered(pausedChat.id, messages);
+        return;
+      }
+
       const url = `${this.graph.host(req.platform)}/${req.accountId}/messages`;
       for (let i = 0; i < text.length; i += DM_LIMIT) {
         await this.graph.post(
@@ -63,7 +75,7 @@ export class MessageSenderService {
 
     try {
       const chat = await this.conversations.findOrCreate({
-        clientId: req.clientId,
+        clientId,
         platform: req.platform,
         senderId: req.senderId,
         receiverId: req.accountId,
@@ -79,6 +91,45 @@ export class MessageSenderService {
     } catch (err) {
       this.logger.error(
         `DM sent to ${req.senderId}, but conversation ${req.id} could not be recorded: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /** The conversation when it is paused now. Fails open: if it cannot be read, the reply is sent. */
+  private async findPausedChat(
+    req: SendableRequest,
+    clientId: string,
+  ): Promise<Chat | null> {
+    try {
+      const chat = await this.conversations.findOrCreate({
+        clientId,
+        platform: req.platform,
+        senderId: req.senderId as string,
+        receiverId: req.accountId,
+      });
+      return this.conversations.isPaused(chat) ? chat : null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not check the pause of conversation ${req.id}, sending the reply: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /** The batch the assistant did not send: stored as one unanswered exchange. */
+  private async recordUnanswered(
+    chatId: string,
+    messages: NonNullable<SendableRequest['messages']>,
+  ): Promise<void> {
+    try {
+      await this.conversations.createUnansweredMessage({
+        chatId,
+        message: messages.map((message) => message.text).join('\n'),
+      });
+      this.logger.log(`Reply not sent: conversation ${chatId} is paused`);
+    } catch (err) {
+      this.logger.error(
+        `Could not record the unanswered batch of conversation ${chatId}: ${(err as Error).message}`,
       );
     }
   }

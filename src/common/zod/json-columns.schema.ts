@@ -91,6 +91,34 @@ export const ReplyRunActivityDetailsSchema = z.strictObject({
   handled: z.int().min(0).optional(),
 });
 
+// CommentExportRecord.filters: the filters of one comments download, as the database stores them.
+// Never holds comment text: ids, enum values and dates only.
+export const ExportFiltersSchema = z.strictObject({
+  clientId: z.uuid().optional(),
+  platform: z.enum(['FACEBOOK', 'INSTAGRAM']).optional(),
+  classification: z
+    .enum(['ENGAGEMENT', 'INQUIRY', 'UNSURE', 'COMPLAINT', 'SPAM', 'INSULT'])
+    .optional(),
+  decisionBasis: z
+    .enum(['RULES', 'AI_MODEL', 'SAFE_FALLBACK', 'UNKNOWN'])
+    .optional(),
+  commentId: z.string().max(255).optional(),
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+  /** Rows created after this instant are not in the file (the export's snapshot). */
+  snapshotAt: z.iso.datetime(),
+});
+
+// Lead.fields: what a chat workflow learned that is specific to one business (feature 004), as a
+// flat map of text values. One save sends at most 30 of them (UpsertLeadSchema), but the stored map
+// keeps every key ever sent, so its size is not capped here: a cap would make a valid row unreadable.
+export const LEAD_FIELD_KEY_MAX = 50;
+export const LEAD_FIELD_VALUE_MAX = 500;
+export const LeadFieldsSchema = z.record(
+  z.string().min(1).max(LEAD_FIELD_KEY_MAX),
+  z.string().max(LEAD_FIELD_VALUE_MAX),
+);
+
 export type AiConfig = z.infer<typeof AiConfigSchema>;
 export type DmReplyConfig = z.infer<typeof DmReplyConfigSchema>;
 export type CommentReplyConfig = z.infer<typeof CommentReplyConfigSchema>;
@@ -98,6 +126,8 @@ export type SocialMedia = z.infer<typeof SocialMediaSchema>;
 export type Location = z.infer<typeof LocationSchema>;
 export type WorkHours = z.infer<typeof WorkHoursSchema>;
 export type Variants = z.infer<typeof VariantsSchema>;
+export type ExportFilters = z.infer<typeof ExportFiltersSchema>;
+export type LeadFields = z.infer<typeof LeadFieldsSchema>;
 export type ReplyRunActivityDetails = z.infer<
   typeof ReplyRunActivityDetailsSchema
 >;

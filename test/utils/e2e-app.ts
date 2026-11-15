@@ -15,7 +15,11 @@ export async function createE2eApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  const app = moduleRef.createNestApplication({ rawBody: true, logger: false });
+  // E2E_LOGS=1 shows the application log, to find out why a test fails
+  const app = moduleRef.createNestApplication({
+    rawBody: true,
+    logger: process.env.E2E_LOGS ? ['log', 'warn', 'error'] : false,
+  });
   configureApp(app);
   await app.init();
   return app;
@@ -23,7 +27,8 @@ export async function createE2eApp(): Promise<INestApplication> {
 
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "client_activities","offers","services","business_info","refresh_tokens","users","clients" RESTART IDENTITY CASCADE',
+    // chats, message_replies, comment_replies and chat_pause_events go with "clients" (foreign keys)
+    'TRUNCATE TABLE "client_activities","comment_export_records","offers","services","business_info","refresh_tokens","users","clients" RESTART IDENTITY CASCADE',
   );
 }
 

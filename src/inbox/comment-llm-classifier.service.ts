@@ -138,7 +138,7 @@ export class CommentLlmClassifierService {
           comment,
         );
         const category = this.parse(raw);
-        if (category) return { type: category, reason: `llm ${model}` };
+        if (category) return { type: category, reason: `llm ${model}`, model };
         this.logger.warn(
           `${model} returned an invalid category: ${raw}${then}`,
         );

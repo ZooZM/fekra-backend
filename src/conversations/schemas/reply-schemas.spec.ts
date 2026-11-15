@@ -4,10 +4,12 @@ import { externalId, storableText } from '@common/zod/storage-fields';
 import {
   ChatIdParamSchema,
   FindOrCreateChatSchema,
+  PauseChatSchema,
   QueryChatSchema,
 } from './chat.schema';
 import {
   CreateMessageReplySchema,
+  CreateUnansweredMessageSchema,
   MAX_MESSAGE_LENGTH,
   MAX_REPLY_LENGTH,
   QueryMessageReplySchema,
@@ -331,6 +333,8 @@ describe('CommentReply schemas', () => {
         ...valid,
         platform: 'INSTAGRAM',
         classification: 'INQUIRY',
+        // a caller that does not say how it decided is stored as UNKNOWN (feature 003)
+        decisionBasis: 'UNKNOWN',
       });
     });
 
@@ -385,7 +389,7 @@ describe('CommentReply schemas', () => {
   });
 
   describe('ReclassifyCommentSchema', () => {
-    it('accepts only a label and a reason', () => {
+    it('accepts a label, a reason and how it was decided, and nothing else', () => {
       expect(
         ReclassifyCommentSchema.parse({
           classification: 'engagement',
@@ -394,6 +398,20 @@ describe('CommentReply schemas', () => {
       ).toEqual({
         classification: 'ENGAGEMENT',
         reason: 'LLM: praise',
+        decisionBasis: 'UNKNOWN',
+      });
+      expect(
+        ReclassifyCommentSchema.parse({
+          classification: 'engagement',
+          reason: 'LLM: praise',
+          decisionBasis: 'AI_MODEL',
+          decisionModel: 'gemini-x',
+        }),
+      ).toEqual({
+        classification: 'ENGAGEMENT',
+        reason: 'LLM: praise',
+        decisionBasis: 'AI_MODEL',
+        decisionModel: 'gemini-x',
       });
     });
 
@@ -452,5 +470,46 @@ describe('CommentReply schemas', () => {
         QueryCommentReplySchema.safeParse({ classification: 'other' }).success,
       ).toBe(false);
     });
+  });
+});
+
+describe('conversation pause and filters (feature 003)', () => {
+  it('QueryChatSchema turns paused into a boolean and rejects other values', () => {
+    expect(QueryChatSchema.parse({ paused: 'true' }).paused).toBe(true);
+    expect(QueryChatSchema.parse({ paused: 'false' }).paused).toBe(false);
+    expect(QueryChatSchema.parse({}).paused).toBeUndefined();
+    expect(QueryChatSchema.safeParse({ paused: 'yes' }).success).toBe(false);
+  });
+
+  it('QueryChatSchema trims the customer identifier and keeps the default order', () => {
+    const q = QueryChatSchema.parse({ senderId: '  psid-1  ' });
+    expect(q.senderId).toBe('psid-1');
+    expect(q.orderBy).toBe('updatedAt');
+    expect(q.orderDir).toBe('desc');
+  });
+
+  it('PauseChatSchema accepts only the four durations and no extra keys', () => {
+    for (const duration of ['until_resumed', '1h', '24h', '7d']) {
+      expect(PauseChatSchema.safeParse({ duration }).success).toBe(true);
+    }
+    expect(PauseChatSchema.safeParse({ duration: '2h' }).success).toBe(false);
+    expect(PauseChatSchema.safeParse({}).success).toBe(false);
+    expect(
+      PauseChatSchema.safeParse({ duration: '1h', extra: 1 }).success,
+    ).toBe(false);
+  });
+
+  it('CreateUnansweredMessageSchema needs a chat and a non-empty message, and strips NUL', () => {
+    expect(
+      CreateUnansweredMessageSchema.parse({ chatId, message: ' hi  ' }),
+    ).toEqual({ chatId, message: 'hi' });
+    expect(
+      CreateUnansweredMessageSchema.safeParse({ chatId, message: '  ' })
+        .success,
+    ).toBe(false);
+    expect(
+      CreateUnansweredMessageSchema.safeParse({ chatId: 'x', message: 'hi' })
+        .success,
+    ).toBe(false);
   });
 });

@@ -1,0 +1,36 @@
+$kind: http-request
+description: |-
+  Pauses the assistant in one conversation. **Requires:** `ADMIN` role (403 otherwise).
+
+  **Body:** `{ "duration": "until_resumed" | "1h" | "24h" | "7d" }`.
+
+  While the conversation is paused the assistant sends no automatic reply, and a reply that is being prepared when the pause takes effect is not sent. New customer messages are still stored, marked `answered: false`. Other conversations are not affected. A timed pause ends by itself; the end is recorded as an automatic resume.
+
+  Pausing an already paused conversation replaces its duration. Every pause is recorded with who did it, when and the duration.
+
+  **Responses**
+  - `200` the conversation with `paused: true`, `pausedAt`, `pausedUntil` (`null` = until resumed) and `pausedBy`.
+  - `403` `FORBIDDEN` for a `CLIENT` user (nothing changes).
+  - `404` `NOT_FOUND` unknown conversation.
+  - `422` `INPUT_VALIDATION_ERROR` for a duration that is not one of the four.
+url: "{{baseUrl}}/chats/:chatId/pause"
+method: POST
+headers:
+  Content-Type: application/json
+pathVariables:
+  chatId: "{{chatId}}"
+body:
+  type: json
+  content: |-
+    {
+      "duration": "1h"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is one of [200, 403, 404, 422]', () => pm.expect([200, 403, 404, 422]).to.include(pm.response.code));
+      if (pm.response.code === 200) {
+        pm.test('The conversation is paused', () => pm.expect(pm.response.json().paused).to.eql(true));
+      }
+    language: text/javascript
+order: 4000

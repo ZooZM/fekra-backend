@@ -20,11 +20,13 @@ export class OffersRepository implements IOffersRepository {
     const orderBy = ORDER_FIELDS.includes(query.orderBy)
       ? query.orderBy
       : 'createdAt';
-    const where: Prisma.OfferWhereInput = {};
+    const where: Prisma.OfferWhereInput = {
+      ...(query.clientId && { clientId: query.clientId }),
+    };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.offer.findMany({
         where,
-        orderBy: { [orderBy]: query.orderDir },
+        orderBy: [{ [orderBy]: query.orderDir }, { id: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),

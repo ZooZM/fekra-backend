@@ -1,0 +1,46 @@
+$kind: http-request
+description: |-
+  Downloads every comment that matches the filters as a CSV file, with **no row limit**. **Requires:** `ADMIN` role (403 otherwise).
+
+  **Query:** the filters of **List Classified Comments** (`clientId`, `platform`, `classification`, `decisionBasis`, `from`, `to`). No `page`, `limit` or order (422).
+
+  **The file:** UTF-8 with a byte order mark (Excel shows Arabic correctly), a header row, CRLF line ends, columns `id, clientId, clientName, platform, commentId, comment, classification, decisionBasis, decisionModel, reason, createdAt`. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading apostrophe, so a spreadsheet never runs customer text as a formula. It is streamed in pages, so any size works. Comments created after the request started are not in it, so the row count equals the list `meta.total` at that moment.
+
+  If the download fails halfway the connection is closed early, so the client sees a failed download and not a short file that looks complete.
+
+  Every download is recorded (who, when, the filters, the number of rows, whether it completed). The record holds no comment text.
+
+  **Responses**
+  - `200` `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="comments-<date>-<time>.csv"`, `Cache-Control: no-store`.
+  - `403` `FORBIDDEN` for a `CLIENT` user.
+  - `422` `INPUT_VALIDATION_ERROR`, for example `to` before `from`.
+url: "{{baseUrl}}/comment-replies/export?classification=complaint"
+method: GET
+queryParams:
+  - key: classification
+    value: complaint
+    disabled: false
+    description: Label filter
+  - key: decisionBasis
+    value: ai_model
+    disabled: true
+    description: How the label was decided
+  - key: from
+    value: "2026-11-01"
+    disabled: true
+    description: From this date
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Is a CSV download with no caching', () => {
+        pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');
+        pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');
+        pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store');
+      });
+      pm.test('Starts with the byte order mark and the header row', () => {
+        pm.expect(pm.response.text().charCodeAt(0)).to.eql(0xFEFF);
+        pm.expect(pm.response.text()).to.include('id,clientId,clientName,platform,commentId,comment,classification,decisionBasis,decisionModel,reason,createdAt');
+      });
+    language: text/javascript
+order: 2000

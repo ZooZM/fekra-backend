@@ -1,11 +1,17 @@
 $kind: http-request
-description: Fetches the business info of a client.
+description: |-
+  Fetches the business info of a client. **Requires:** `ADMIN` role.
+
+  **Responses**
+  - `200` the business info.
+  - `404` `NOT_FOUND` when the client has none yet. The dashboard then shows an empty form and a **Create** button. (This used to be an empty `200`.)
+  - `422` `INPUT_VALIDATION_ERROR` when `clientId` is not a UUID.
 url: "{{baseUrl}}/business-info/client/:clientId"
 method: GET
 pathVariables:
   clientId: "{{clientId}}"
 scripts:
   - type: afterResponse
-    code: pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));
+    code: pm.test('Status is one of [200, 404]', () => pm.expect([200, 404]).to.include(pm.response.code));
     language: text/javascript
 order: 2000

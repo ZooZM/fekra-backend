@@ -29,6 +29,8 @@ export interface Classification {
   reason: string;
   /** Only on `unsure` from the LLM: true if the same call may succeed later (network, quota, outage). */
   retryable?: boolean;
+  /** Only on a label from the LLM: the model that gave it (stored as the comment's decision model). */
+  model?: string;
 }
 
 // ─────────────────────────── normalization ───────────────────────────

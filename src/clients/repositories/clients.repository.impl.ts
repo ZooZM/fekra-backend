@@ -15,6 +15,7 @@ import { CreateClientData } from '../interfaces/create-client-data.interface';
 import { UpdateClientData } from '../interfaces/update-client-data.interface';
 import {
   AccountField,
+  ChatRoute,
   ClientActor,
   ClientRecord,
   ClientRef,
@@ -75,14 +76,17 @@ export class ClientsRepository implements IClientsRepository {
   ): Promise<PaginatedResult<ClientRecord>> {
     // the same filter feeds the page and the total, so the count matches the search
     const search = query.search ? escapeLike(query.search) : undefined;
-    const where: Prisma.ClientWhereInput = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { businessCategory: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : {};
+    const where: Prisma.ClientWhereInput = {
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { businessCategory: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+      ...(query.chatSubscribed !== undefined && {
+        chatSubscribed: query.chatSubscribed,
+      }),
+    };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.client.findMany({
         where,
@@ -210,6 +214,92 @@ export class ClientsRepository implements IClientsRepository {
       `getClientDataForWorkFlow(${brandId}) → ${row ? row.id : 'not found'}`,
     );
     return row ? toWorkflowData(row) : null;
+  }
+
+  /**
+   * Database first, so a saved subscription or endpoint applies to the very next message
+   * (FR-046). The cache keeps the old resilience: it is only read when the database fails.
+   */
+  async findChatRoute(accountId: string): Promise<ChatRoute | null> {
+    if (!accountId) return null;
+    const key = `client:account:${accountId}`;
+    let row: Client | null;
+    try {
+      row = await this.prisma.client.findFirst({
+        where: { OR: [{ fbPageId: accountId }, { instaAccountId: accountId }] },
+      });
+      if (row) await this.cacheSet(key, row);
+    } catch (err) {
+      this.logger.warn(
+        `Chat route read failed for account ${accountId}, trying the cache: ${(err as Error).message}`,
+      );
+      row = await this.cacheGet<Client>(key);
+      if (!row) {
+        this.logger.error(`No cached chat route for account ${accountId}`);
+        return null;
+      }
+    }
+    return row ? this.toChatRoute(row) : null;
+  }
+
+  async findChatRouteById(clientId: string): Promise<ChatRoute | null> {
+    const row = await this.prisma.client.findUnique({
+      where: { id: clientId },
+    });
+    return row ? this.toChatRoute(row) : null;
+  }
+
+  async findWorkflowDataFresh(
+    accountId: string,
+  ): Promise<ClientWorkflowData | null> {
+    if (!accountId) return null;
+    const key = `client:workflow:${accountId}`;
+    let row: ClientWorkflowRow | null;
+    try {
+      row = await this.prisma.client.findFirst({
+        where: { OR: [{ fbPageId: accountId }, { instaAccountId: accountId }] },
+        include: { services: true, offers: true, businessInfo: true },
+      });
+      if (row) await this.cacheSet(key, row);
+    } catch (err) {
+      this.logger.warn(
+        `Workflow data read failed for account ${accountId}, trying the cache: ${(err as Error).message}`,
+      );
+      row = await this.cacheGet<ClientWorkflowRow>(key);
+      if (!row) {
+        this.logger.error(`No cached workflow data for account ${accountId}`);
+        return null;
+      }
+    }
+    return row ? toWorkflowData(row) : null;
+  }
+
+  private toChatRoute(row: Client): ChatRoute {
+    return {
+      clientId: row.id,
+      name: row.name,
+      chatSubscribed: row.chatSubscribed,
+      chatWorkflowEndpoint: row.chatWorkflowEndpoint,
+    };
+  }
+
+  private async cacheSet(key: string, value: unknown): Promise<void> {
+    try {
+      await this.redis.set(key, JSON.stringify(value), 'EX', 30 * 60);
+    } catch (err) {
+      this.logger.warn(
+        `Cache write failed for ${key}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  private async cacheGet<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.redis.get(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch {
+      return null;
+    }
   }
 
   async getAccessToken(clientId: string): Promise<string | null> {

@@ -25,6 +25,7 @@ import { CommentLlmClassifierService } from './comment-llm-classifier.service';
 import { CommentReplyService } from './comment-reply.service';
 import { CommentsService } from '@app/comments/comments.service';
 import { ConversationsService } from '@app/conversations/conversations.service';
+import { Chat, CommentDecisionBasis } from '@app/generated/prisma/client';
 
 @Injectable()
 export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
@@ -230,24 +231,37 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
   private async handle(item: InboxItem) {
     switch (item.kind) {
       case 'message': {
+        // Checkpoint 1 (research R2): only a subscribed client's DMs are stored, buffered or
+        // sent to Gemini. The route is read fresh, so a subscribe or unsubscribe applies at once.
+        const route = await this.clientsService.findChatRoute(item.accountId);
+        if (!route?.chatSubscribed) {
+          this.logger.warn(
+            `Dropped DM ${item.id} for account ${item.accountId}: chat service not subscribed`,
+          );
+          return;
+        }
+
+        let chat: Chat | null = null;
         if (item.senderId) {
           try {
-            const client = await this.clientsService.findByAccountId(
-              item.accountId,
-            );
-            if (client) {
-              await this.conversations.findOrCreate({
-                clientId: client.id,
-                platform: item.platform,
-                senderId: item.senderId,
-                receiverId: item.accountId,
-              });
-            }
+            chat = await this.conversations.findOrCreate({
+              clientId: route.clientId,
+              platform: item.platform,
+              senderId: item.senderId,
+              receiverId: item.accountId,
+            });
           } catch (err) {
+            // fail open: if the chat cannot be read, answer as if it were not paused (R16)
             this.logger.error(
               `Failed to persist conversation for message ${item.id}: ${(err as Error).message}`,
             );
           }
+        }
+
+        // A paused conversation: store the message as not answered, spend no LLM call on it
+        if (chat && this.conversations.isPaused(chat)) {
+          await this.recordPausedMessage(chat.id, item);
+          return;
         }
 
         let order = 0;
@@ -296,9 +310,20 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
         let { type, reason, retryable } = this.commentClassifier.classify(
           item.text,
         );
+        // How the label was decided, stored with the comment so the model can be judged later
+        let decisionBasis: CommentDecisionBasis = 'RULES';
+        let decisionModel: string | null = null;
         if (type === 'unsure') {
-          ({ type, reason, retryable } =
-            await this.commentLlmClassifier.classify(item.text, client));
+          const llm = await this.commentLlmClassifier.classify(
+            item.text,
+            client,
+          );
+          ({ type, reason, retryable } = llm);
+          // an answer without a model name did not come from a model call (empty comment)
+          if (llm.model) {
+            decisionBasis = 'AI_MODEL';
+            decisionModel = llm.model;
+          }
         }
 
         // 'unsure' now means the LLM call itself failed
@@ -307,6 +332,8 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           // the prompt's fallback rule: ambiguous -> spam (like only, never a reply)
           type = 'spam';
           reason = `${reason}, fallback to spam`;
+          decisionBasis = 'SAFE_FALLBACK';
+          decisionModel = null;
         }
         this.logger.debug(`Comment ${item.id} → ${type} (${reason})`);
 
@@ -318,6 +345,8 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
             comment: item.text ?? '',
             classification: type,
             reason,
+            decisionBasis,
+            decisionModel,
           });
         } catch (err) {
           this.logger.error(
@@ -333,7 +362,9 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
         break;
       }
       case 'batch': {
-        const client = await this.clientsService.getClientDataForWorkFlow(
+        // Checkpoint 2: the DM window and the queue can take seconds, so the subscription and the
+        // pause are checked again. One fresh read gives the client's data and its subscription.
+        const client = await this.clientsService.findWorkflowDataFresh(
           item.accountId,
         );
         if (!client) {
@@ -342,9 +373,93 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           );
           return;
         }
-        const id = item.id;
-        await this.delivery.send(id, { ...item, client });
+        if (!client.chatSubscribed) {
+          this.logger.warn(
+            `Dropped batch ${item.id} for account ${item.accountId}: chat service not subscribed`,
+          );
+          return;
+        }
+
+        if (await this.isChatPaused(client.id, item)) {
+          await this.recordPausedBatch(client.id, item);
+          return;
+        }
+        // clientId travels with the request: the reply is recorded and the pause is re-checked with it
+        await this.delivery.send(item.id, {
+          ...item,
+          clientId: client.id,
+          client,
+        });
         break;
+      }
+    }
+  }
+
+  /**
+   * Finds the batch's conversation and says whether it is paused now. Fails open: when the chat
+   * cannot be read the batch is delivered as usual (research R16).
+   */
+  private async isChatPaused(
+    clientId: string,
+    item: Extract<InboxItem, { kind: 'batch' }>,
+  ): Promise<boolean> {
+    try {
+      const chat = await this.conversations.findOrCreate({
+        clientId,
+        platform: item.platform,
+        senderId: item.senderId,
+        receiverId: item.accountId,
+      });
+      return this.conversations.isPaused(chat);
+    } catch (err) {
+      this.logger.warn(
+        `Could not check the pause of ${item.id}, delivering: ${(err as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  /** A batch that was waiting when the conversation was paused: stored as one unanswered exchange. */
+  private async recordPausedBatch(
+    clientId: string,
+    item: Extract<InboxItem, { kind: 'batch' }>,
+  ): Promise<void> {
+    try {
+      const chat = await this.conversations.findOrCreate({
+        clientId,
+        platform: item.platform,
+        senderId: item.senderId,
+        receiverId: item.accountId,
+      });
+      await this.conversations.createUnansweredMessage({
+        chatId: chat.id,
+        message: item.messages.map((m) => m.text).join('\n'),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to record paused batch ${item.id}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /** Each message of a paused conversation becomes its own unanswered exchange. */
+  private async recordPausedMessage(
+    chatId: string,
+    item: Extract<InboxItem, { kind: 'message' }>,
+  ): Promise<void> {
+    const texts: string[] = [];
+    if (item.text) texts.push(item.text);
+    // attachments are not sent to Gemini while paused: a placeholder says what arrived
+    for (const att of item.attachments ?? []) {
+      texts.push(att.type === 'image' ? '[image]' : '[voice message]');
+    }
+    for (const message of texts) {
+      try {
+        await this.conversations.createUnansweredMessage({ chatId, message });
+      } catch (err) {
+        this.logger.error(
+          `Failed to record paused message ${item.id}: ${(err as Error).message}`,
+        );
       }
     }
   }

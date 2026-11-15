@@ -20,11 +20,13 @@ export class ServicesRepository implements IServicesRepository {
     const orderBy = ORDER_FIELDS.includes(query.orderBy)
       ? query.orderBy
       : 'createdAt';
-    const where: Prisma.ServiceWhereInput = {};
+    const where: Prisma.ServiceWhereInput = {
+      ...(query.clientId && { clientId: query.clientId }),
+    };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.service.findMany({
         where,
-        orderBy: { [orderBy]: query.orderDir },
+        orderBy: [{ [orderBy]: query.orderDir }, { id: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),

@@ -72,6 +72,7 @@ describe('CommentLlmClassifierService', () => {
       await expect(service.classify('some comment', client)).resolves.toEqual({
         type: category,
         reason: `llm ${PRIMARY}`,
+        model: PRIMARY, // stored as the comment's decision model
       });
     },
   );
@@ -160,8 +161,33 @@ describe('CommentLlmClassifierService', () => {
       expect(await service.classify('x', client)).toEqual({
         type: 'inquiry',
         reason: `llm ${FALLBACK}`,
+        model: FALLBACK, // the model that answered, not the one that failed
       });
       expect(modelsUsed()).toEqual([PRIMARY, FALLBACK]);
+    });
+
+    it('names the fallback model when the primary gave an invalid category', async () => {
+      reply('{"category":"question"}');
+      reply('{"category":"spam"}');
+      expect((await service.classify('x', client)).model).toBe(FALLBACK);
+    });
+
+    it('names no model when every model failed or gave nothing usable', async () => {
+      generateContent.mockRejectedValue(new Error('network down'));
+      expect(await service.classify('x', client)).not.toHaveProperty('model');
+
+      generateContent.mockReset();
+      reply('{"category":"question"}');
+      reply('{"category":"other"}');
+      expect(await service.classify('x', client)).not.toHaveProperty('model');
+
+      expect(await makeService({}).classify('x', client)).not.toHaveProperty(
+        'model',
+      );
+    });
+
+    it('names no model for an empty comment, which never reaches a model', async () => {
+      expect(await service.classify('   ', client)).not.toHaveProperty('model');
     });
 
     it('falls back on a timeout and on a 503 overload', async () => {
