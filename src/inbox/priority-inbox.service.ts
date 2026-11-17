@@ -384,11 +384,23 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
           await this.recordPausedBatch(client.id, item);
           return;
         }
+
+        const latestChatMessagesRows =
+          await this.conversations.findLastMessagesByIdForWorkflow(
+            item.senderId,
+            item.accountId,
+            item.platform,
+          );
+        const latestMessages = latestChatMessagesRows
+          .map((row) => `message: ${row.message} |||| reply: ${row.reply}`)
+          .join('\n');
+
         // clientId travels with the request: the reply is recorded and the pause is re-checked with it
         await this.delivery.send(item.id, {
           ...item,
           clientId: client.id,
           client,
+          latestMessages,
         });
         break;
       }

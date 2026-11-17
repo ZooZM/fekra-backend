@@ -34,6 +34,7 @@ import {
   PAUSE_DURATION_MS,
   RecentExchangesQuery,
 } from './types/chat.types';
+import { Platform } from '@app/inbox/inbox.types';
 
 @Injectable()
 export class ConversationsService {
@@ -66,6 +67,18 @@ export class ConversationsService {
   async findOne(chatId: string, user: SafeUser): Promise<ChatRecord> {
     const chat = await this.findScoped(chatId, user);
     return this.toRecord(chat, user);
+  }
+
+  async findLastMessagesByIdForWorkflow(
+    senderId: string,
+    receiverId: string,
+    platform: Platform,
+  ): Promise<MessageReply[]> {
+    return this.repo.findLastMessagesByIdForWorkflow(
+      senderId,
+      receiverId,
+      platform,
+    );
   }
 
   async findMessages(

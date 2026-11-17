@@ -48,6 +48,7 @@ describe('PriorityInboxService (comments)', () => {
   let conversations: {
     findOrCreate: jest.Mock;
     isPaused: jest.Mock;
+    findLastMessagesByIdForWorkflow: jest.Mock;
     createUnansweredMessage: jest.Mock;
   };
   let clients: {
@@ -76,6 +77,7 @@ describe('PriorityInboxService (comments)', () => {
     conversations = {
       findOrCreate: jest.fn().mockResolvedValue({ id: 'chat-1' }),
       isPaused: jest.fn().mockReturnValue(false),
+      findLastMessagesByIdForWorkflow: jest.fn().mockResolvedValue([]),
       createUnansweredMessage: jest.fn().mockResolvedValue(undefined),
     };
     clients = {
@@ -310,6 +312,7 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
   let conversations: {
     findOrCreate: jest.Mock;
     isPaused: jest.Mock;
+    findLastMessagesByIdForWorkflow: jest.Mock;
     createUnansweredMessage: jest.Mock;
   };
   let clients: {
@@ -339,6 +342,7 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
     conversations = {
       findOrCreate: jest.fn().mockResolvedValue({ id: 'chat-1' }),
       isPaused: jest.fn().mockReturnValue(false),
+      findLastMessagesByIdForWorkflow: jest.fn().mockResolvedValue([]),
       createUnansweredMessage: jest.fn().mockResolvedValue(undefined),
     };
     clients = {
@@ -493,8 +497,15 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
 
   describe('a DM batch (checkpoint 2)', () => {
     it('is delivered with the fresh client data for a subscribed, active conversation', async () => {
+      conversations.findLastMessagesByIdForWorkflow.mockResolvedValue([
+        { message: 'prior message', reply: 'prior reply' },
+      ]);
+
       await handle(batch());
 
+      expect(
+        conversations.findLastMessagesByIdForWorkflow,
+      ).toHaveBeenCalledWith('customer-1', 'page-1', 'facebook');
       expect(clients.findWorkflowDataFresh).toHaveBeenCalledWith('page-1');
       expect(delivery.send).toHaveBeenCalledWith(
         'dm-1',
@@ -505,6 +516,7 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
           client: expect.objectContaining({
             services: [{ name: 'Cut', price: '120' }],
           }),
+          latestMessages: 'message: prior message |||| reply: prior reply',
         }),
       );
     });

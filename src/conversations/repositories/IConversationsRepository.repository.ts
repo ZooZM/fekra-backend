@@ -14,6 +14,7 @@ import {
   PauseDuration,
   RecentExchangesQuery,
 } from '../types/chat.types';
+import { Platform } from '@app/inbox/inbox.types';
 
 export const CONVERSATIONS_REPOSITORY = 'CONVERSATIONS_REPOSITORY';
 
@@ -28,6 +29,11 @@ export interface IConversationsRepository {
   ): Promise<ChatRowWithClient | null>;
   /** The newest exchange of each chat (message and reply cut to 200 characters). */
   lastExchanges(chatIds: string[]): Promise<Map<string, LastExchange>>;
+  findLastMessagesByIdForWorkflow(
+    senderId: string,
+    receiverId: string,
+    platform: Platform,
+  ): Promise<MessageReply[]>;
   findMessages(
     chatId: string,
     query: QueryMessageReplyInput,

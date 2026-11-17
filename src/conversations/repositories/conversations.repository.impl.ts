@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Chat, MessageReply, Prisma } from '@app/generated/prisma/client';
+import {
+  Chat,
+  MessageReply,
+  Prisma,
+  Platform as ClientPlatform,
+} from '@app/generated/prisma/client';
 import { PrismaService } from '@app/prisma/prisma.service';
 import {
   PaginatedResult,
@@ -20,6 +25,7 @@ import {
   RecentExchangesQuery,
 } from '../types/chat.types';
 import { IConversationsRepository } from './IConversationsRepository.repository';
+import { Platform } from '@app/inbox/inbox.types';
 
 const WITH_CLIENT = {
   client: { select: { id: true, name: true } },
@@ -61,6 +67,34 @@ export class ConversationsRepository implements IConversationsRepository {
     ]);
 
     return paginate(data, total, query.page, query.limit);
+  }
+
+  async findLastMessagesByIdForWorkflow(
+    senderId: string,
+    receiverId: string,
+    platform: Platform,
+  ): Promise<MessageReply[]> {
+    const chat = await this.prisma.chat.findFirst({
+      where: {
+        senderId,
+        receiverId,
+        platform:
+          platform === 'facebook'
+            ? ClientPlatform.FACEBOOK
+            : ClientPlatform.INSTAGRAM,
+      },
+      select: { id: true },
+    });
+
+    if (!chat) return [];
+
+    const messages = await this.prisma.messageReply.findMany({
+      where: { chatId: chat.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 10,
+    });
+
+    return messages.reverse();
   }
 
   /** The same rule as isEffectivelyPaused, as a where clause. */

@@ -133,6 +133,52 @@ describe('ConversationsRepository (feature 003)', () => {
     });
   });
 
+  describe('findLastMessagesByIdForWorkflow', () => {
+    it('returns the ten newest messages in chronological order', async () => {
+      prisma.chat.findFirst.mockResolvedValue({ id: 'chat-1' });
+      const newestFirst = [
+        { id: 'message-2', message: 'second' },
+        { id: 'message-1', message: 'first' },
+      ];
+      prisma.messageReply.findMany.mockResolvedValue(newestFirst);
+
+      await expect(
+        repo.findLastMessagesByIdForWorkflow(
+          'customer-1',
+          'page-1',
+          'facebook',
+        ),
+      ).resolves.toEqual([...newestFirst].reverse());
+
+      expect(prisma.chat.findFirst).toHaveBeenCalledWith({
+        where: {
+          senderId: 'customer-1',
+          receiverId: 'page-1',
+          platform: 'FACEBOOK',
+        },
+        select: { id: true },
+      });
+      expect(prisma.messageReply.findMany).toHaveBeenCalledWith({
+        where: { chatId: 'chat-1' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+      });
+    });
+
+    it('returns an empty list when there is no matching conversation', async () => {
+      prisma.chat.findFirst.mockResolvedValue(null);
+
+      await expect(
+        repo.findLastMessagesByIdForWorkflow(
+          'customer-1',
+          'page-1',
+          'instagram',
+        ),
+      ).resolves.toEqual([]);
+      expect(prisma.messageReply.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('lastExchanges', () => {
     it('makes no query for an empty page', async () => {
       await expect(repo.lastExchanges([])).resolves.toEqual(new Map());

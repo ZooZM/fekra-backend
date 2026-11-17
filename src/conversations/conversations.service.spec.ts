@@ -53,6 +53,7 @@ describe('ConversationsService', () => {
         'resume',
         'releaseExpiredPauses',
         'findRecentExchanges',
+        'findLastMessagesByIdForWorkflow',
       ].map((method) => [method, jest.fn()]),
     );
     repo.lastExchanges.mockResolvedValue(new Map());
@@ -174,6 +175,24 @@ describe('ConversationsService', () => {
             pausedByName: 'Admin One',
           }),
         ),
+      );
+    });
+
+    it('forwards workflow message history lookup to the repository', async () => {
+      const messages = [{ id: 'message-1' }] as never;
+      repo.findLastMessagesByIdForWorkflow.mockResolvedValue(messages);
+
+      await expect(
+        service.findLastMessagesByIdForWorkflow(
+          'customer-1',
+          'page-1',
+          'facebook',
+        ),
+      ).resolves.toBe(messages);
+      expect(repo.findLastMessagesByIdForWorkflow).toHaveBeenCalledWith(
+        'customer-1',
+        'page-1',
+        'facebook',
       );
     });
     afterEach(() => jest.useRealTimers());
