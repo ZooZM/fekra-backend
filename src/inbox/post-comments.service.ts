@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GraphApiService, GraphError } from './graph-api.service';
 import { Platform } from './inbox.types';
+import { GraphToken } from '@app/clients/types/client.types';
 
 /** A top-level comment, normalized from the Facebook and Instagram shapes. */
 export interface PostComment {
@@ -74,12 +75,12 @@ export class PostCommentsService {
     platform: Platform,
     accountId: string,
     postId: string,
-    token: string,
+    auth: GraphToken,
   ): Promise<UnrepliedComments> {
     const { comments, truncated } = await this.fetchComments(
       platform,
       postId,
-      token,
+      auth,
     );
     const unreplied = comments
       .filter((c) => this.needsReply(c, platform, accountId))
@@ -106,18 +107,18 @@ export class PostCommentsService {
     platform: Platform,
     accountId: string,
     commentId: string,
-    token: string,
+    auth: GraphToken,
   ): Promise<RecheckOutcome> {
     const fields =
       platform === 'facebook'
         ? 'id,is_hidden,comments.limit(100){from{id}}'
         : 'id,hidden,replies.limit(50){from{id}}';
-    const url = `${this.graph.host('facebook')}/${commentId}?${new URLSearchParams({ fields }).toString()}`;
+    const url = `${this.graph.host(auth.api)}/${commentId}?${new URLSearchParams({ fields }).toString()}`;
 
     try {
       const c = await this.graph.get<FacebookComment & InstagramComment>(
         url,
-        token,
+        auth.token,
       );
       const hidden = platform === 'facebook' ? c.is_hidden : c.hidden;
       if (hidden === true) return 'hidden';
@@ -138,11 +139,12 @@ export class PostCommentsService {
   private async fetchComments(
     platform: Platform,
     postId: string,
-    token: string,
+    auth: GraphToken,
   ): Promise<{ comments: PostComment[]; truncated: boolean }> {
     const max = this.num('COMMENT_BACKFILL_MAX', 500);
-    // Instagram also goes through graph.facebook.com with the Page token, like CommentReplyService
-    const base = this.graph.host('facebook');
+    // the token says the host: an Instagram token reads graph.instagram.com, a Page token
+    // graph.facebook.com (for Instagram too); the fields are the same on both Instagram hosts
+    const base = this.graph.host(auth.api);
     const params =
       platform === 'facebook'
         ? new URLSearchParams({
@@ -165,7 +167,7 @@ export class PostCommentsService {
 
     while (url && out.length < max) {
       const page: Page<FacebookComment & InstagramComment> =
-        await this.graph.get(url, token);
+        await this.graph.get(url, auth.token);
       out.push(...(page.data ?? []).map(normalize));
       url = page.paging?.next;
     }

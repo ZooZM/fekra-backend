@@ -7,6 +7,7 @@ import { CommentReplyService } from './comment-reply.service';
 import { GraphApiService, SendableRequest } from './graph-api.service';
 
 const HOST = 'https://graph.test';
+const IG_HOST = 'https://graph.instagram.test';
 
 const commentConfig = (
   over: Partial<CommentReplyConfig> = {},
@@ -29,6 +30,7 @@ const dmConfig = (over: Partial<DmReplyConfig> = {}): DmReplyConfig => ({
 const makeRequest = (
   over: {
     platform?: 'facebook' | 'instagram';
+    accountId?: string;
     comment?: Partial<CommentReplyConfig>;
     dm?: Partial<DmReplyConfig>;
   } = {},
@@ -37,7 +39,7 @@ const makeRequest = (
     kind: 'comment',
     platform: over.platform ?? 'facebook',
     id: 'c-1',
-    accountId: 'page-1',
+    accountId: over.accountId ?? 'page-1',
     senderId: 'user-1',
     clientId: 'client-1',
     client: {
@@ -54,7 +56,7 @@ describe('CommentReplyService', () => {
     post: jest.Mock<Promise<void>, [string, unknown, string]>;
     deadLetter: jest.Mock;
   };
-  let clients: { getAccessToken: jest.Mock };
+  let clients: { getGraphToken: jest.Mock };
 
   /** [url, body] of every POST, in order. */
   const posts = () =>
@@ -64,16 +66,19 @@ describe('CommentReplyService', () => {
 
   beforeEach(() => {
     graph = {
-      // a different Instagram host proves IG comments go through graph.facebook.com
-      host: jest.fn((platform: string) =>
-        platform === 'facebook' ? HOST : 'https://graph.instagram.test',
-      ),
+      // a different Instagram host proves which API each call went to
+      host: jest.fn((api: string) => (api === 'facebook' ? HOST : IG_HOST)),
       post: jest
         .fn<Promise<void>, [string, unknown, string]>()
         .mockResolvedValue(undefined),
       deadLetter: jest.fn().mockResolvedValue(undefined),
     };
-    clients = { getAccessToken: jest.fn().mockResolvedValue('token') };
+    // a Page token by default: Facebook, and Instagram through Facebook Login
+    clients = {
+      getGraphToken: jest
+        .fn()
+        .mockResolvedValue({ token: 'token', api: 'facebook' }),
+    };
     service = new CommentReplyService(
       graph as unknown as GraphApiService,
       clients as unknown as ClientsService,
@@ -141,8 +146,16 @@ describe('CommentReplyService', () => {
 
   // ─────────────────────────── Instagram ───────────────────────────
 
-  describe('Instagram', () => {
+  describe('Instagram with the Page token (Facebook Login)', () => {
     const ig = () => makeRequest({ platform: 'instagram' });
+
+    it('asks for the Instagram token first', async () => {
+      await service.handle(ig(), 'engagement');
+      expect(clients.getGraphToken).toHaveBeenCalledWith(
+        'client-1',
+        'instagram',
+      );
+    });
 
     it('inquiry: DM via /me/messages, then reply via /replies, no like', async () => {
       await service.handle(ig(), 'inquiry');
@@ -188,6 +201,89 @@ describe('CommentReplyService', () => {
         expect(posts()).toEqual([[`${HOST}/c-1`, { hide: true }]]);
       },
     );
+  });
+
+  // ─────────────────────────── Instagram with its own token ───────────────────────────
+
+  describe('Instagram with the Instagram token (Instagram Login)', () => {
+    const ig = () => makeRequest({ platform: 'instagram', accountId: 'ig-1' });
+
+    beforeEach(() => {
+      clients.getGraphToken.mockResolvedValue({
+        token: 'ig-token',
+        api: 'instagram',
+      });
+    });
+
+    it('inquiry: DM via /{ig-id}/messages, then reply via /replies, on graph.instagram.com with the Instagram token', async () => {
+      await service.handle(ig(), 'inquiry');
+
+      expect(graph.post.mock.calls).toEqual([
+        [
+          `${IG_HOST}/ig-1/messages`,
+          {
+            recipient: { comment_id: 'c-1' },
+            message: { text: 'hi, here are the details' },
+          },
+          'ig-token',
+        ],
+        [`${IG_HOST}/c-1/replies`, { message: 'check your inbox' }, 'ig-token'],
+      ]);
+    });
+
+    it('inquiry: "DMs closed" reply when the private reply fails', async () => {
+      graph.post.mockRejectedValueOnce(new Error('closed'));
+      await service.handle(ig(), 'inquiry');
+
+      expect(postedTo('/replies')).toEqual([
+        [
+          `${IG_HOST}/c-1/replies`,
+          { message: 'please message us' },
+          'ig-token',
+        ],
+      ]);
+    });
+
+    it('engagement: reply via /replies, no like', async () => {
+      await service.handle(ig(), 'engagement');
+      expect(graph.post.mock.calls).toEqual([
+        [`${IG_HOST}/c-1/replies`, { message: 'thanks!' }, 'ig-token'],
+      ]);
+    });
+
+    it('spam: does nothing', async () => {
+      await service.handle(ig(), 'spam');
+      expect(graph.post).not.toHaveBeenCalled();
+    });
+
+    it.each(['complaint', 'insult'] as const)(
+      '%s: hides the comment with hide=true',
+      async (category) => {
+        await service.handle(ig(), category);
+        expect(graph.post.mock.calls).toEqual([
+          [`${IG_HOST}/c-1`, { hide: true }, 'ig-token'],
+        ]);
+      },
+    );
+
+    it('applies the n8n question replies the same way', async () => {
+      await service.handleN8nReply(ig(), {
+        type: 'question',
+        dmText: 'dm from n8n',
+        publicReplyIfDmSent: 'sent',
+        publicReplyIfDmClosed: 'closed',
+      });
+      expect(posts()).toEqual([
+        [
+          `${IG_HOST}/ig-1/messages`,
+          {
+            recipient: { comment_id: 'c-1' },
+            message: { text: 'dm from n8n' },
+          },
+        ],
+        [`${IG_HOST}/c-1/replies`, { message: 'sent' }],
+      ]);
+    });
   });
 
   // ─────────────────────────── engagement ───────────────────────────
@@ -306,7 +402,7 @@ describe('CommentReplyService', () => {
       ['missing token', makeRequest()],
     ])('dead-letters %s without throwing', async (label, req) => {
       if (label === 'missing token')
-        clients.getAccessToken.mockResolvedValue(null);
+        clients.getGraphToken.mockResolvedValue(null);
       await expect(service.handle(req, 'engagement')).resolves.toBeUndefined();
       expect(graph.post).not.toHaveBeenCalled();
       expect(graph.deadLetter).toHaveBeenCalled();

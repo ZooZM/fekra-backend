@@ -5,6 +5,7 @@ import {
   AccountField,
   ChatRoute,
   ClientActor,
+  ClientAdminRecord,
   ClientRecord,
   ClientRef,
   ClientUpdateResult,
@@ -20,14 +21,17 @@ export const CLIENTS_REPOSITORY = 'CLIENTS_REPOSITORY';
 // transaction, so a change and its record can't separate.
 export interface IClientsRepository extends Omit<
   IBaseRepository<
-    ClientRecord,
+    ClientAdminRecord,
     CreateClientData,
     UpdateClientData,
     QueryClientInput
   >,
   'create' | 'update' | 'delete'
 > {
-  create(data: CreateClientData, actor: ClientActor): Promise<ClientRecord>;
+  create(
+    data: CreateClientData,
+    actor: ClientActor,
+  ): Promise<ClientAdminRecord>;
   /** null: no such client. */
   update(
     id: string,
@@ -57,7 +61,10 @@ export interface IClientsRepository extends Omit<
   findChatRouteById(clientId: string): Promise<ChatRoute | null>;
   /** Like getClientDataForWorkFlow, but database first (cache only as an outage fallback). */
   findWorkflowDataFresh(accountId: string): Promise<ClientWorkflowData | null>;
+  /** The encrypted Page token. null: no such client, or it has no Page token. */
   getAccessToken(clientId: string): Promise<string | null>;
+  /** The encrypted Instagram Login token. null: no such client, or it has none. */
+  getInstaAccessToken(clientId: string): Promise<string | null>;
   /**
    * Records a reply run starting or stopping. No client row changes, so this is one insert and
    * the client does not have to exist anymore: the entry keeps its name.
@@ -70,6 +77,12 @@ export interface IClientsRepository extends Omit<
   ): Promise<void>;
   /** false: no such client. Does not change the version. */
   setAccessToken(
+    clientId: string,
+    encryptedToken: string,
+    actor: ClientActor,
+  ): Promise<boolean>;
+  /** Same as setAccessToken, for the Instagram Login token. */
+  setInstaAccessToken(
     clientId: string,
     encryptedToken: string,
     actor: ClientActor,

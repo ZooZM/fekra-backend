@@ -14,7 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { ClientsService } from '@app/clients/clients.service';
-import { ClientActor } from '@app/clients/types/client.types';
+import { ClientActor, GraphToken } from '@app/clients/types/client.types';
 import { BackfillRunStore, RunRef, StoredRun } from './backfill-run.store';
 import { GraphError } from './graph-api.service';
 import { InboxItem, Platform } from './inbox.types';
@@ -120,8 +120,8 @@ export class CommentBackfillService implements OnModuleDestroy {
       });
     }
 
-    const token = await this.clients.getAccessToken(client.id);
-    if (!token)
+    const auth = await this.clients.getGraphToken(client.id, platform);
+    if (!auth)
       throw new BadRequestException('No access token stored for this client');
 
     const delayMs = this.num('COMMENT_BACKFILL_DELAY_MS', 5000);
@@ -146,7 +146,7 @@ export class CommentBackfillService implements OnModuleDestroy {
         platform,
         accountId,
         postId,
-        token,
+        auth,
       );
     } catch (err) {
       await this.release(ref);
@@ -220,7 +220,7 @@ export class CommentBackfillService implements OnModuleDestroy {
       `Backfill run ${run.id} started on ${platform}:${postId} by admin ${actor.id}: ${unreplied.length}/${checked} comments without a reply`,
     );
     this.active.set(run.id, ref);
-    void this.feed(run, unreplied, token, delayMs);
+    void this.feed(run, unreplied, auth, delayMs);
 
     return {
       platform,
@@ -325,7 +325,7 @@ export class CommentBackfillService implements OnModuleDestroy {
   private async feed(
     run: StoredRun,
     comments: PostComment[],
-    token: string,
+    auth: GraphToken,
     delayMs: number,
   ): Promise<void> {
     const ttl = this.resultTtlSec();
@@ -337,7 +337,7 @@ export class CommentBackfillService implements OnModuleDestroy {
         if (this.stopped) return;
 
         try {
-          if (!(await this.step(run, c, token, delayMs + LOCK_GRACE_MS, ttl))) {
+          if (!(await this.step(run, c, auth, delayMs + LOCK_GRACE_MS, ttl))) {
             return;
           }
         } catch (err) {
@@ -362,7 +362,7 @@ export class CommentBackfillService implements OnModuleDestroy {
   private async step(
     run: StoredRun,
     c: PostComment,
-    token: string,
+    auth: GraphToken,
     lockTtlMs: number,
     ttl: number,
   ): Promise<boolean> {
@@ -384,7 +384,7 @@ export class CommentBackfillService implements OnModuleDestroy {
         run.platform,
         run.accountId,
         c.id,
-        token,
+        auth,
       );
     } catch (err) {
       if (!isAccessError(err)) throw err;
@@ -474,7 +474,9 @@ export function toHttpError(
   if (err.code === 190) {
     return new BadRequestException({
       message:
-        "The client's access token is invalid or expired. Set a new one with PUT /clients/:id/access-token",
+        platform === 'facebook'
+          ? "The client's access token is invalid or expired. Set a new one with PUT /clients/:id/access-token"
+          : "The client's access token is invalid or expired. Set a new one with PUT /clients/:id/instagram-access-token (Instagram token) or PUT /clients/:id/access-token (Page token)",
       errorCode: 'META_TOKEN_INVALID',
       details,
     });
@@ -485,7 +487,7 @@ export function toHttpError(
       message:
         platform === 'facebook'
           ? 'The page token is missing a permission to read comments (pages_read_engagement, pages_read_user_content)'
-          : 'The page token is missing a permission to read Instagram comments (instagram_basic, instagram_manage_comments)',
+          : 'The token is missing a permission to read Instagram comments (instagram_business_basic, instagram_business_manage_comments for an Instagram token; instagram_basic, instagram_manage_comments for a Page token)',
       errorCode: 'META_PERMISSION_DENIED',
       details,
     });

@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientsService } from '@app/clients/clients.service';
+import { GraphToken } from '@app/clients/types/client.types';
 import {
   CommentBackfillService,
   toHttpError,
@@ -55,20 +56,21 @@ export class ClientPostsService {
   ): Promise<ClientPostPage> {
     const { platform, after, limit } = query;
     const { id, accountId } = await this.account(clientId, platform);
-    const token = await this.tokenOf(id);
+    const auth = await this.tokenOf(id, platform);
 
     const params = new URLSearchParams({
       fields: platform === 'facebook' ? FACEBOOK_FIELDS : INSTAGRAM_FIELDS,
       limit: String(limit),
     });
     if (after) params.set('after', after);
-    // Instagram also goes through graph.facebook.com with the Page token, like the comment flow
+    // Instagram goes to graph.instagram.com with the client's Instagram token, or to
+    // graph.facebook.com with the Page token when it has none, like the comment flow
     const edge = platform === 'facebook' ? 'posts' : 'media';
-    const url = `${this.graph.host('facebook')}/${accountId}/${edge}?${params.toString()}`;
+    const url = `${this.graph.host(auth.api)}/${accountId}/${edge}?${params.toString()}`;
 
     let page: GraphPage<FacebookPost & InstagramMedia>;
     try {
-      page = await this.graph.get(url, token);
+      page = await this.graph.get(url, auth.token);
     } catch (err) {
       throw this.listError(err, platform, accountId);
     }
@@ -110,7 +112,7 @@ export class ClientPostsService {
         errorCode: 'META_POST_NOT_FOUND',
       });
     }
-    const token = await this.tokenOf(id);
+    const auth = await this.tokenOf(id, platform);
 
     try {
       const { checked, unreplied, truncated } =
@@ -118,7 +120,7 @@ export class ClientPostsService {
           platform,
           accountId,
           postId,
-          token,
+          auth,
         );
       return {
         postId,
@@ -169,12 +171,15 @@ export class ClientPostsService {
     return { id: client.id, accountId };
   }
 
-  private async tokenOf(clientId: string): Promise<string> {
-    const token = await this.clients.getAccessToken(clientId);
-    if (!token) {
+  private async tokenOf(
+    clientId: string,
+    platform: Platform,
+  ): Promise<GraphToken> {
+    const auth = await this.clients.getGraphToken(clientId, platform);
+    if (!auth) {
       throw new BadRequestException('No access token stored for this client');
     }
-    return token;
+    return auth;
   }
 
   /**

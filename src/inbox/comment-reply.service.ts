@@ -5,6 +5,7 @@ import {
   CommentReplyConfig,
   DmReplyConfig,
 } from '@common/zod/json-columns.schema';
+import { GraphToken } from '@app/clients/types/client.types';
 import { GraphApiService, SendableRequest } from './graph-api.service';
 import { CommentCategory } from './comment-classifier.service';
 
@@ -57,6 +58,8 @@ interface CommentContext {
   req: SendableRequest;
   base: string;
   token: string;
+  /** Which Graph API the token is for (see ClientsService.getGraphToken). */
+  api: GraphToken['api'];
   config: CommentReplyConfig;
   dm: DmReplyConfig;
 }
@@ -192,17 +195,20 @@ export class CommentReplyService {
   }
 
   /**
-   * Both platforms use graph.facebook.com with the Page token, like the n8n workflows
-   * (Instagram API with Facebook Login, not graph.instagram.com).
+   * Facebook uses the Page token on graph.facebook.com. Instagram uses the client's Instagram
+   * token on graph.instagram.com when one is stored, and otherwise the Page token on
+   * graph.facebook.com (Instagram API with Facebook Login, like the n8n workflows).
+   * The edges and bodies are the same on both Instagram hosts, except the private reply.
    */
   private async context(req: SendableRequest): Promise<CommentContext> {
     if (!req.client) throw new Error('client is missing');
-    const token = await this.clients.getAccessToken(req.clientId);
-    if (!token) throw new Error('No access token stored for this client');
+    const auth = await this.clients.getGraphToken(req.clientId, req.platform);
+    if (!auth) throw new Error('No access token stored for this client');
     return {
       req,
-      base: this.graph.host('facebook'),
-      token,
+      base: this.graph.host(auth.api),
+      token: auth.token,
+      api: auth.api,
       config: req.client.commentReplyConfig,
       dm: req.client.dmReplyConfig,
     };
@@ -223,14 +229,17 @@ export class CommentReplyService {
   /**
    * Private reply to the commenter. True only if the DM was actually sent.
    * A failure here is expected (closed DMs, or the 7-day private reply window passed).
-   * Facebook: POST /{page-id}/messages. Instagram: POST /me/messages (the Page behind the IG account).
+   * Facebook: POST /{page-id}/messages. Instagram with the Page token: POST /me/messages (the
+   * Page behind the IG account). Instagram with its own token: POST /{ig-id}/messages, the
+   * documented path on graph.instagram.com.
    */
   private async tryPrivateDm(
-    { req, base, token }: CommentContext,
+    { req, base, token, api }: CommentContext,
     text?: string,
   ) {
     if (!text) return false;
-    const sender = req.platform === 'instagram' ? 'me' : req.accountId;
+    const sender =
+      req.platform === 'instagram' && api === 'facebook' ? 'me' : req.accountId;
     try {
       await this.graph.post(
         `${base}/${sender}/messages`,

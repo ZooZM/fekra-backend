@@ -15,13 +15,15 @@ const CLIENT_ID = '8ed9f96d-c790-4279-ba5f-88feec1c68e3';
 const PAGE = '11111111111';
 const IG = '22222222222';
 const TOKEN = 'page-token';
+const AUTH = { token: TOKEN, api: 'facebook' } as const; // a Page token
+const IG_HOST = 'https://graph.instagram.test';
 
 const errorBody = (e: unknown) =>
   (e as { getResponse: () => unknown }).getResponse();
 
 describe('ClientPostsService', () => {
   let service: ClientPostsService;
-  let clients: { findById: jest.Mock; getAccessToken: jest.Mock };
+  let clients: { findById: jest.Mock; getGraphToken: jest.Mock };
   let graph: {
     host: jest.Mock;
     get: jest.Mock<Promise<unknown>, [string, string]>;
@@ -36,10 +38,10 @@ describe('ClientPostsService', () => {
         fbPageId: PAGE,
         instaAccountId: IG,
       }),
-      getAccessToken: jest.fn().mockResolvedValue(TOKEN),
+      getGraphToken: jest.fn().mockResolvedValue(AUTH),
     };
     graph = {
-      host: jest.fn().mockReturnValue(HOST),
+      host: jest.fn((api: string) => (api === 'facebook' ? HOST : IG_HOST)),
       get: jest.fn<Promise<unknown>, [string, string]>(),
     };
     postComments = {
@@ -156,6 +158,39 @@ describe('ClientPostsService', () => {
         commentsCount: 4,
         permalink: 'https://www.instagram.com/p/AAA/',
       });
+    });
+
+    it('reads Instagram media through graph.facebook.com with the Page token when there is no Instagram token', async () => {
+      graph.get.mockResolvedValueOnce({ data: [] });
+      await service.list(CLIENT_ID, { platform: 'instagram', limit: 25 });
+
+      expect(clients.getGraphToken).toHaveBeenCalledWith(
+        CLIENT_ID,
+        'instagram',
+      );
+      expect(graph.get.mock.calls[0][1]).toBe(TOKEN);
+      expect(new URL(graph.get.mock.calls[0][0]).origin).toBe(HOST);
+    });
+
+    it('reads Instagram media through graph.instagram.com with the Instagram token', async () => {
+      clients.getGraphToken.mockResolvedValue({
+        token: 'ig-token',
+        api: 'instagram',
+      });
+      graph.get.mockResolvedValueOnce({ data: [igMedia()] });
+
+      const page = await service.list(CLIENT_ID, {
+        platform: 'instagram',
+        limit: 25,
+      });
+
+      expect(graph.get.mock.calls[0][1]).toBe('ig-token');
+      const url = new URL(graph.get.mock.calls[0][0]);
+      expect(url.origin + url.pathname).toBe(`${IG_HOST}/${IG}/media`);
+      expect(url.searchParams.get('fields')).toBe(
+        'id,caption,timestamp,permalink,media_type,media_url,thumbnail_url,comments_count',
+      );
+      expect(page.data.map((p) => p.id)).toEqual(['17900000000000001']);
     });
 
     it('passes the cursor and the page size to Graph', async () => {
@@ -358,7 +393,7 @@ describe('ClientPostsService', () => {
       });
 
       it('400s when the client has no access token', async () => {
-        clients.getAccessToken.mockResolvedValue(null);
+        clients.getGraphToken.mockResolvedValue(null);
         await expect(service.list(CLIENT_ID, query)).rejects.toBeInstanceOf(
           BadRequestException,
         );
@@ -435,7 +470,7 @@ describe('ClientPostsService', () => {
         'facebook',
         PAGE,
         `${PAGE}_900`,
-        TOKEN,
+        AUTH,
       );
       expect(result).toMatchObject({
         postId: `${PAGE}_900`,
@@ -471,7 +506,24 @@ describe('ClientPostsService', () => {
         'instagram',
         IG,
         '17900000000000001',
-        TOKEN,
+        AUTH,
+      );
+    });
+
+    it('uses the Instagram token for Instagram media when the client has one', async () => {
+      const igAuth = { token: 'ig-token', api: 'instagram' };
+      clients.getGraphToken.mockResolvedValue(igAuth);
+      await service.unrepliedCount(CLIENT_ID, '17900000000000001', 'instagram');
+
+      expect(clients.getGraphToken).toHaveBeenCalledWith(
+        CLIENT_ID,
+        'instagram',
+      );
+      expect(postComments.listUnreplied).toHaveBeenCalledWith(
+        'instagram',
+        IG,
+        '17900000000000001',
+        igAuth,
       );
     });
 
@@ -485,7 +537,7 @@ describe('ClientPostsService', () => {
         errorCode: 'META_POST_NOT_FOUND',
       });
       expect(postComments.listUnreplied).not.toHaveBeenCalled();
-      expect(clients.getAccessToken).not.toHaveBeenCalled();
+      expect(clients.getGraphToken).not.toHaveBeenCalled();
     });
 
     it('does not accept a bare post id that only starts with the same digits', async () => {
@@ -540,7 +592,7 @@ describe('ClientPostsService', () => {
     });
 
     it('400s when the client has no access token', async () => {
-      clients.getAccessToken.mockResolvedValue(null);
+      clients.getGraphToken.mockResolvedValue(null);
       await expect(
         service.unrepliedCount(CLIENT_ID, `${PAGE}_900`, 'facebook'),
       ).rejects.toBeInstanceOf(BadRequestException);

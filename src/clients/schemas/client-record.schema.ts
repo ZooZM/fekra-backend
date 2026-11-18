@@ -1,6 +1,6 @@
 // clients/schemas/client-record.schema.ts
 // Response shapes. They document the API (OpenAPI) and give the dashboard its types; they are
-// not used to validate anything. They never include the access token.
+// not used to validate anything. They never include a token, only whether each one is stored.
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import {
@@ -21,6 +21,13 @@ export const ClientRecordSchema = z.object({
   commentReplyConfig: CommentReplyConfigSchema,
   chatWorkflowEndpoint: z.string().nullable(),
   chatSubscribed: z.boolean(),
+  /** A Facebook Page token is stored (PUT /clients/:id/access-token). */
+  hasAccessToken: z.boolean(),
+  /**
+   * An Instagram token is stored (PUT /clients/:id/instagram-access-token): Instagram calls use it.
+   * When false, Instagram calls use the Page token.
+   */
+  hasInstaAccessToken: z.boolean(),
   version: z.number().int(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

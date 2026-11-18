@@ -39,6 +39,7 @@ describe('Admin-only access (e2e)', () => {
     ['patch', `/clients/${id}`, { name: 'X' }],
     ['delete', `/clients/${id}`],
     ['put', `/clients/${id}/access-token`, { token: 't' }],
+    ['put', `/clients/${id}/instagram-access-token`, { token: 't' }],
     ['get', '/users/admin'],
     ['get', `/users/admin/${id}`],
     ['get', '/users/admin/email/a@b.com'],

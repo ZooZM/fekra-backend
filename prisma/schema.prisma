@@ -69,7 +69,11 @@ model Client {
 
   // Store ENCRYPTED (e.g. AES-256-GCM) from the service layer. Never save plaintext.
   // Text because the encrypted value (iv + tag + ciphertext) can exceed 255 chars.
-  accessToken String @map("access_token") @db.Text
+  // accessToken: the Facebook Page token (graph.facebook.com). Null for an Instagram-only client.
+  // instaAccessToken: an Instagram Login token (graph.instagram.com). When it is null, Instagram
+  // calls use the Page token instead (Instagram API with Facebook Login). A client has at least one.
+  accessToken      String? @map("access_token") @db.Text
+  instaAccessToken String? @map("insta_access_token") @db.Text
 
   brandLogo String? @map("brand_logo") @db.VarChar(255)
 

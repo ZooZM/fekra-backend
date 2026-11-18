@@ -1261,6 +1261,12 @@
             },
             "type": "array"
           },
+          "hasAccessToken": {
+            "type": "boolean"
+          },
+          "hasInstaAccessToken": {
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -1298,6 +1304,8 @@
           "commentReplyConfig",
           "chatWorkflowEndpoint",
           "chatSubscribed",
+          "hasAccessToken",
+          "hasInstaAccessToken",
           "version",
           "createdAt",
           "updatedAt"
@@ -1910,6 +1918,11 @@
               }
             ]
           },
+          "instaAccessToken": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
           "instaAccountId": {
             "anyOf": [
               {
@@ -1929,8 +1942,7 @@
         },
         "required": [
           "name",
-          "businessCategory",
-          "accessToken"
+          "businessCategory"
         ],
         "type": "object"
       },
@@ -2535,6 +2547,12 @@
                     "null"
                   ]
                 },
+                "hasAccessToken": {
+                  "type": "boolean"
+                },
+                "hasInstaAccessToken": {
+                  "type": "boolean"
+                },
                 "id": {
                   "format": "uuid",
                   "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -2572,6 +2590,8 @@
                 "commentReplyConfig",
                 "chatWorkflowEndpoint",
                 "chatSubscribed",
+                "hasAccessToken",
+                "hasInstaAccessToken",
                 "version",
                 "createdAt",
                 "updatedAt"
@@ -4393,6 +4413,41 @@
     "/clients/{id}/access-token": {
       "put": {
         "operationId": "ClientsController_setAccessToken",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceAccessTokenDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/instagram-access-token": {
+      "put": {
+        "operationId": "ClientsController_setInstaAccessToken",
         "parameters": [
           {
             "in": "path",

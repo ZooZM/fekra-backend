@@ -193,3 +193,120 @@ describe('ClientsRepository chat reads (feature 003)', () => {
     });
   });
 });
+
+describe('ClientsRepository token flags (Instagram token)', () => {
+  const stored = {
+    ...row,
+    businessCategory: 'Cafe',
+    accessToken: 'v1:PAGE-CIPHERTEXT',
+    instaAccessToken: null,
+    aiConfig: { language: 'ARABIC' },
+    dmReplyConfig: {},
+    commentReplyConfig: {},
+    version: 1,
+  };
+  const actor = { id: 'a1', name: 'Admin', email: 'admin@example.com' };
+  const WITH_TOKENS = { accessToken: false, instaAccessToken: false };
+
+  let tx: {
+    client: Record<string, jest.Mock>;
+    clientActivity: Record<string, jest.Mock>;
+  };
+  let prisma: {
+    client: Record<string, jest.Mock>;
+    $transaction: jest.Mock;
+  };
+  let redis: { get: jest.Mock; set: jest.Mock };
+  let repo: ClientsRepository;
+
+  /** Every record the admin endpoints return: flags yes, token values no. */
+  const expectFlagsOnly = (record: unknown) => {
+    expect(record).toMatchObject({
+      hasAccessToken: true,
+      hasInstaAccessToken: false,
+    });
+    expect(JSON.stringify(record)).not.toContain('CIPHERTEXT');
+  };
+
+  beforeEach(() => {
+    tx = {
+      client: {
+        create: jest.fn().mockResolvedValue(stored),
+        findUnique: jest.fn().mockResolvedValue(stored),
+        update: jest.fn().mockResolvedValue({ ...stored, name: 'New' }),
+      },
+      clientActivity: { create: jest.fn().mockResolvedValue({}) },
+    };
+    prisma = {
+      client: {
+        findFirst: jest.fn().mockResolvedValue(row),
+        findUnique: jest.fn().mockResolvedValue(stored),
+        findMany: jest.fn().mockResolvedValue([stored]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      $transaction: jest.fn((arg: unknown) =>
+        typeof arg === 'function'
+          ? (arg as (t: typeof tx) => Promise<unknown>)(tx)
+          : Promise.all(arg as Promise<unknown>[]),
+      ),
+    };
+    redis = { get: jest.fn(), set: jest.fn().mockResolvedValue('OK') };
+    repo = new ClientsRepository(prisma as never, redis as never);
+  });
+
+  it('findAll reads the tokens only to report which are set', async () => {
+    const page = await repo.findAll({
+      page: 1,
+      limit: 20,
+      orderBy: 'createdAt',
+      orderDir: 'desc',
+    } as never);
+    expect(prisma.client.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ omit: WITH_TOKENS }),
+    );
+    expectFlagsOnly(page.data[0]);
+  });
+
+  it('findById reads the tokens only to report which are set', async () => {
+    const record = await repo.findById('c1');
+    expect(prisma.client.findUnique).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      omit: WITH_TOKENS,
+    });
+    expectFlagsOnly(record);
+  });
+
+  it('create returns the flags, not the tokens it stored', async () => {
+    const record = await repo.create({ id: 'c1' } as never, actor);
+    expect(tx.client.create).toHaveBeenCalledWith(
+      expect.objectContaining({ omit: WITH_TOKENS }),
+    );
+    expectFlagsOnly(record);
+  });
+
+  it('update returns the flags, whether it saved or found nothing to change', async () => {
+    const updated = await repo.update('c1', { name: 'New' }, 1, actor);
+    expect(tx.client.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ omit: WITH_TOKENS }),
+    );
+    expect(tx.client.update).toHaveBeenCalledWith(
+      expect.objectContaining({ omit: WITH_TOKENS }),
+    );
+    expect(updated?.status).toBe('updated');
+    expectFlagsOnly((updated as { record: unknown }).record);
+
+    const unchanged = await repo.update('c1', { name: 'Acme' }, 1, actor);
+    expect(unchanged?.status).toBe('unchanged');
+    expectFlagsOnly((unchanged as { record: unknown }).record);
+  });
+
+  it('never reads the tokens for the cached webhook lookups', async () => {
+    await repo.findByAccountId('page-1');
+    await repo.findChatRoute('page-1');
+    for (const [args] of prisma.client.findFirst.mock.calls as [
+      Record<string, unknown>,
+    ][]) {
+      expect(args).not.toHaveProperty('omit');
+    }
+  });
+});

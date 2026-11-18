@@ -8,14 +8,27 @@ import {
 } from '@common/zod/json-columns.schema';
 import { BusinessInfoRecord } from '@app/business-info/interfaces/business-info.interface';
 
-/** Client without the token, JSON columns parsed. Replaces SafeClient. */
+/** Client without the tokens, JSON columns parsed. Replaces SafeClient. */
 export type ClientRecord = Omit<
   Client,
-  'accessToken' | 'aiConfig' | 'dmReplyConfig' | 'commentReplyConfig'
+  | 'accessToken'
+  | 'instaAccessToken'
+  | 'aiConfig'
+  | 'dmReplyConfig'
+  | 'commentReplyConfig'
 > & {
   aiConfig: AiConfig;
   dmReplyConfig: DmReplyConfig;
   commentReplyConfig: CommentReplyConfig;
+};
+
+/**
+ * What the admin endpoints return: the record, plus whether each token is stored. The tokens
+ * themselves never leave the repository; the dashboard only needs to know which ones are set.
+ */
+export type ClientAdminRecord = ClientRecord & {
+  hasAccessToken: boolean;
+  hasInstaAccessToken: boolean;
 };
 
 export type ServiceRecord = Omit<Service, 'variants'> & {
@@ -51,10 +64,19 @@ export interface VersionConflictDetails {
 }
 
 export type ClientUpdateResult =
-  | { status: 'updated' | 'unchanged'; record: ClientRecord }
+  | { status: 'updated' | 'unchanged'; record: ClientAdminRecord }
   | ({ status: 'conflict' } & VersionConflictDetails);
 
 export type AccountField = 'fbPageId' | 'instaAccountId';
+
+/**
+ * A decrypted token and the Graph API it belongs to: `facebook` is a Page token for
+ * graph.facebook.com, `instagram` an Instagram Login token for graph.instagram.com.
+ */
+export interface GraphToken {
+  token: string;
+  api: 'facebook' | 'instagram';
+}
 
 /** The activity actions of a reply run on a post's unreplied comments. */
 export type ReplyRunAction = 'REPLY_RUN_STARTED' | 'REPLY_RUN_STOPPED';

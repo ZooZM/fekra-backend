@@ -17,6 +17,7 @@ describe('ClientsController', () => {
         'update',
         'remove',
         'setAccessToken',
+        'setInstaAccessToken',
       ].map((name) => [name, jest.fn()]),
     );
     controller = new ClientsController(service as unknown as ClientsService);
@@ -45,6 +46,12 @@ describe('ClientsController', () => {
   it('forwards access-token replacement with the acting admin', async () => {
     await controller.setAccessToken({ id: 'c1' }, { token: 'token' }, user);
     expect(service.setAccessToken).toHaveBeenCalledWith('c1', 'token', actor);
+  });
+
+  it('forwards Instagram token replacement with the acting admin, never to the Page token', async () => {
+    await controller.setInstaAccessToken({ id: 'c1' }, { token: 'ig' }, user);
+    expect(service.setInstaAccessToken).toHaveBeenCalledWith('c1', 'ig', actor);
+    expect(service.setAccessToken).not.toHaveBeenCalled();
   });
 
   it('rejects an :id that is not a UUID (e.g. a Facebook page id) before the database', () => {

@@ -23,6 +23,7 @@ export class PrismaService
         },
         client: {
           accessToken: true,
+          instaAccessToken: true,
         },
       },
     });

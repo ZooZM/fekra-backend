@@ -17,6 +17,7 @@ import {
   AccountField,
   ChatRoute,
   ClientActor,
+  ClientAdminRecord,
   ClientRecord,
   ClientRef,
   ClientUpdateResult,
@@ -29,8 +30,10 @@ import {
 } from '@common/zod/json-columns.schema';
 import {
   ClientWorkflowRow,
+  toClientAdminRecord,
   toClientRecord,
   toWorkflowData,
+  WITH_TOKENS,
 } from '../mappers/client.mapper';
 import { QueryClientInput } from '../schemas/query-client.schema';
 import { changedFields } from '../helpers/changed-fields';
@@ -73,7 +76,7 @@ export class ClientsRepository implements IClientsRepository {
 
   async findAll(
     query: QueryClientInput,
-  ): Promise<PaginatedResult<ClientRecord>> {
+  ): Promise<PaginatedResult<ClientAdminRecord>> {
     // the same filter feeds the page and the total, so the count matches the search
     const search = query.search ? escapeLike(query.search) : undefined;
     const where: Prisma.ClientWhereInput = {
@@ -93,30 +96,39 @@ export class ClientsRepository implements IClientsRepository {
         orderBy: [{ [query.orderBy]: query.orderDir }, { id: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
+        omit: WITH_TOKENS,
       }),
       this.prisma.client.count({ where }),
     ]);
-    return paginate(rows.map(toClientRecord), total, query.page, query.limit);
+    return paginate(
+      rows.map(toClientAdminRecord),
+      total,
+      query.page,
+      query.limit,
+    );
   }
 
-  async findById(id: string): Promise<ClientRecord | null> {
-    const row = await this.prisma.client.findUnique({ where: { id } });
-    return row ? toClientRecord(row) : null;
+  async findById(id: string): Promise<ClientAdminRecord | null> {
+    const row = await this.prisma.client.findUnique({
+      where: { id },
+      omit: WITH_TOKENS,
+    });
+    return row ? toClientAdminRecord(row) : null;
   }
 
   async create(
     data: CreateClientData,
     actor: ClientActor,
-  ): Promise<ClientRecord> {
+  ): Promise<ClientAdminRecord> {
     return this.prisma.$transaction(async (tx) => {
-      const row = await tx.client.create({ data });
+      const row = await tx.client.create({ data, omit: WITH_TOKENS });
       await this.recordActivity(tx, {
         action: 'CREATED',
         clientId: row.id,
         clientName: row.name,
         actor,
       });
-      return toClientRecord(row);
+      return toClientAdminRecord(row);
     });
   }
 
@@ -127,7 +139,10 @@ export class ClientsRepository implements IClientsRepository {
     actor: ClientActor,
   ): Promise<ClientUpdateResult | null> {
     return this.prisma.$transaction(async (tx) => {
-      const current = await tx.client.findUnique({ where: { id } });
+      const current = await tx.client.findUnique({
+        where: { id },
+        omit: WITH_TOKENS,
+      });
       if (!current) return null;
       if (current.version !== expectedVersion) {
         return this.conflict(tx, current);
@@ -135,7 +150,7 @@ export class ClientsRepository implements IClientsRepository {
 
       const fields = changedFields(current, data);
       if (fields.length === 0) {
-        return { status: 'unchanged', record: toClientRecord(current) };
+        return { status: 'unchanged', record: toClientAdminRecord(current) };
       }
 
       // the version in the where clause makes this a compare-and-swap: a concurrent save
@@ -145,6 +160,7 @@ export class ClientsRepository implements IClientsRepository {
         row = await tx.client.update({
           where: { id, version: expectedVersion },
           data: { ...data, version: { increment: 1 } },
+          omit: WITH_TOKENS,
         });
       } catch (e) {
         if (
@@ -163,7 +179,7 @@ export class ClientsRepository implements IClientsRepository {
         actor,
         changedFields: fields,
       });
-      return { status: 'updated', record: toClientRecord(row) };
+      return { status: 'updated', record: toClientAdminRecord(row) };
     });
   }
 
@@ -310,10 +326,38 @@ export class ClientsRepository implements IClientsRepository {
     return row?.accessToken ?? null;
   }
 
-  async setAccessToken(
+  async getInstaAccessToken(clientId: string): Promise<string | null> {
+    const row = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { instaAccessToken: true },
+    });
+    return row?.instaAccessToken ?? null;
+  }
+
+  setAccessToken(
     clientId: string,
     token: string,
     actor: ClientActor,
+  ): Promise<boolean> {
+    return this.replaceToken(clientId, { accessToken: token }, actor);
+  }
+
+  setInstaAccessToken(
+    clientId: string,
+    token: string,
+    actor: ClientActor,
+  ): Promise<boolean> {
+    // the action is the same; changedFields tells the two tokens apart in the activity log
+    return this.replaceToken(clientId, { instaAccessToken: token }, actor, [
+      'instaAccessToken',
+    ]);
+  }
+
+  private replaceToken(
+    clientId: string,
+    data: { accessToken: string } | { instaAccessToken: string },
+    actor: ClientActor,
+    changedFields?: string[],
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       const client = await tx.client.findUnique({
@@ -322,15 +366,13 @@ export class ClientsRepository implements IClientsRepository {
       });
       if (!client) return false;
       // the token is not part of the edit version, so replacing it never causes a conflict
-      await tx.client.update({
-        where: { id: clientId },
-        data: { accessToken: token },
-      });
+      await tx.client.update({ where: { id: clientId }, data });
       await this.recordActivity(tx, {
         action: 'ACCESS_TOKEN_REPLACED',
         clientId,
         clientName: client.name,
         actor,
+        changedFields,
       });
       return true;
     });

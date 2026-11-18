@@ -80,7 +80,53 @@ describe('client schemas', () => {
     expect(
       UpdateClientSchema.safeParse({ version: 1, accessToken: 'x' }).success,
     ).toBe(false);
+    expect(
+      UpdateClientSchema.safeParse({ version: 1, instaAccessToken: 'x' })
+        .success,
+    ).toBe(false);
     expect(UpdateClientSchema.safeParse({ version: 0 }).success).toBe(false);
+  });
+
+  describe('tokens on create', () => {
+    const noToken = { name: 'C', businessCategory: 'B' };
+
+    it('accepts a Page token, an Instagram token, or both', () => {
+      expect(CreateClientSchema.safeParse(base).success).toBe(true);
+      expect(
+        CreateClientSchema.safeParse({ ...noToken, instaAccessToken: 'ig' })
+          .success,
+      ).toBe(true);
+      expect(
+        CreateClientSchema.safeParse({ ...base, instaAccessToken: 'ig' })
+          .success,
+      ).toBe(true);
+    });
+
+    it('refuses a client with no token, on the accessToken field', () => {
+      const result = CreateClientSchema.safeParse(noToken);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]).toMatchObject({
+        path: ['accessToken'],
+        message: 'Enter a Facebook Page token or an Instagram token',
+      });
+    });
+
+    it('trims tokens and refuses blank or oversized ones', () => {
+      expect(
+        CreateClientSchema.parse({ ...base, instaAccessToken: '  ig  ' })
+          .instaAccessToken,
+      ).toBe('ig');
+      expect(
+        CreateClientSchema.safeParse({ ...noToken, instaAccessToken: '   ' })
+          .success,
+      ).toBe(false);
+      expect(
+        CreateClientSchema.safeParse({
+          ...base,
+          instaAccessToken: 'x'.repeat(4097),
+        }).success,
+      ).toBe(false);
+    });
   });
 
   it('keeps reading a stored config that is on with no messages (the reader stays lenient)', () => {

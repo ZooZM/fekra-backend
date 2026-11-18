@@ -343,4 +343,86 @@ describe('Client posts API (e2e)', () => {
       expect((res.body as Body).errorCode).toBe('META_TOKEN_INVALID');
     });
   });
+
+  // ───────────────── which token and host Instagram calls use ─────────────────
+
+  describe('Instagram token', () => {
+    const IG_PAGE = '114022207099999';
+    const IG_ACCOUNT = '17841400000000001';
+    let igClientId: string;
+
+    /** Each Graph call as "host path" with the bearer token it carried. */
+    const sent: { host: string; path: string; auth?: string }[] = [];
+    const stubRecording = () => {
+      sent.length = 0;
+      stubGraph((url, init) => {
+        sent.push({
+          host: url.hostname,
+          path: url.pathname,
+          auth: (init?.headers as Record<string, string>)?.authorization,
+        });
+        return { body: { data: [] } };
+      });
+    };
+
+    beforeAll(async () => {
+      const created = await request(app.getHttpServer())
+        .post('/clients')
+        .set(bearer(adminToken))
+        .send({
+          name: 'IG Client',
+          businessCategory: 'Cafe',
+          fbPageId: IG_PAGE,
+          instaAccountId: IG_ACCOUNT,
+          accessToken: 'e2e-page-token-2',
+        })
+        .expect(201);
+      igClientId = (created.body as { id: string }).id;
+    });
+
+    it('uses the Page token on graph.facebook.com while the client has no Instagram token', async () => {
+      stubRecording();
+      await get(`/clients/${igClientId}/posts?platform=instagram`).expect(200);
+      expect(sent).toEqual([
+        {
+          host: 'graph.facebook.com',
+          path: `/v24.0/${IG_ACCOUNT}/media`,
+          auth: 'Bearer e2e-page-token-2',
+        },
+      ]);
+    });
+
+    it('uses the Instagram token on graph.instagram.com once it is set; Facebook keeps the Page token', async () => {
+      await request(app.getHttpServer())
+        .put(`/clients/${igClientId}/instagram-access-token`)
+        .set(bearer(adminToken))
+        .send({ token: 'e2e-ig-token' })
+        .expect(200);
+
+      stubRecording();
+      await get(`/clients/${igClientId}/posts?platform=instagram`).expect(200);
+      await get(
+        `/clients/${igClientId}/posts/17900000000000001/unreplied-count?platform=instagram`,
+      ).expect(200);
+      await get(`/clients/${igClientId}/posts?platform=facebook`).expect(200);
+
+      expect(sent).toEqual([
+        {
+          host: 'graph.instagram.com',
+          path: `/v24.0/${IG_ACCOUNT}/media`,
+          auth: 'Bearer e2e-ig-token',
+        },
+        {
+          host: 'graph.instagram.com',
+          path: '/v24.0/17900000000000001/comments',
+          auth: 'Bearer e2e-ig-token',
+        },
+        {
+          host: 'graph.facebook.com',
+          path: `/v24.0/${IG_PAGE}/posts`,
+          auth: 'Bearer e2e-page-token-2',
+        },
+      ]);
+    });
+  });
 });

@@ -15,15 +15,23 @@ import { CreateClientInput, UpdateClientInput } from './schemas/client.schema';
 import {
   ChatRoute,
   ClientActor,
+  ClientAdminRecord,
   ClientRecord,
   ClientRef,
   ClientWorkflowData,
+  GraphToken,
   ReplyRunAction,
 } from './types/client.types';
 import { ReplyRunActivityDetails } from '@common/zod/json-columns.schema';
 import { randomUUID } from 'crypto';
 import { Platform } from '@app/generated/prisma/client';
 import { QueryClientInput } from './schemas/query-client.schema';
+
+/**
+ * The Instagram token's AAD: the row id plus the column, so it can't be copied into the Page
+ * token column of the same row (or the other way round) and still decrypt.
+ */
+const instaAad = (clientId: string) => `${clientId}:instaAccessToken`;
 
 @Injectable()
 export class ClientsService {
@@ -35,21 +43,30 @@ export class ClientsService {
   async create(
     input: CreateClientInput,
     actor: ClientActor,
-  ): Promise<ClientRecord> {
+  ): Promise<ClientAdminRecord> {
     await this.assertAccountsFree(input);
-    const { accessToken, ...rest } = input;
+    const { accessToken, instaAccessToken, ...rest } = input;
     const id = randomUUID(); // generated first: it's the AAD for the encryption
     return this.repo.create(
-      { ...rest, id, accessToken: this.crypto.encrypt(accessToken, id) },
+      {
+        ...rest,
+        id,
+        accessToken: accessToken ? this.crypto.encrypt(accessToken, id) : null,
+        instaAccessToken: instaAccessToken
+          ? this.crypto.encrypt(instaAccessToken, instaAad(id))
+          : null,
+      },
       actor,
     );
   }
 
-  findAll(query: QueryClientInput): Promise<PaginatedResult<ClientRecord>> {
+  findAll(
+    query: QueryClientInput,
+  ): Promise<PaginatedResult<ClientAdminRecord>> {
     return this.repo.findAll(query);
   }
 
-  async findById(id: string): Promise<ClientRecord> {
+  async findById(id: string): Promise<ClientAdminRecord> {
     const client = await this.repo.findById(id);
     if (!client) throw new NotFoundException('Client not found');
     return client;
@@ -63,7 +80,7 @@ export class ClientsService {
     id: string,
     input: UpdateClientInput,
     actor: ClientActor,
-  ): Promise<ClientRecord> {
+  ): Promise<ClientAdminRecord> {
     const { version, ...data } = input;
     await this.assertAccountsFree(data, id);
     await this.assertChatService(id, data);
@@ -152,9 +169,46 @@ export class ClientsService {
     return this.repo.recordReplyRunActivity(client, action, actor, details);
   }
 
+  async setInstaAccessToken(
+    clientId: string,
+    token: string,
+    actor: ClientActor,
+  ): Promise<void> {
+    const stored = await this.repo.setInstaAccessToken(
+      clientId,
+      this.crypto.encrypt(token, instaAad(clientId)),
+      actor,
+    );
+    if (!stored) throw new NotFoundException('Client not found');
+  }
+
+  /** The Facebook Page token. */
   async getAccessToken(clientId: string): Promise<string | null> {
     const stored = await this.repo.getAccessToken(clientId);
     return stored ? this.crypto.decrypt(stored, clientId) : null;
+  }
+
+  /**
+   * The token for Graph calls about this platform's account, and the API it is for. Instagram
+   * uses the Instagram Login token when one is stored (graph.instagram.com), and otherwise the
+   * Page token of the linked Facebook Page (graph.facebook.com, Instagram API with Facebook
+   * Login), so clients set up before the Instagram token existed keep working. null: no token.
+   */
+  async getGraphToken(
+    clientId: string,
+    platform: 'facebook' | 'instagram',
+  ): Promise<GraphToken | null> {
+    if (platform === 'instagram') {
+      const stored = await this.repo.getInstaAccessToken(clientId);
+      if (stored) {
+        return {
+          token: this.crypto.decrypt(stored, instaAad(clientId)),
+          api: 'instagram',
+        };
+      }
+    }
+    const token = await this.getAccessToken(clientId);
+    return token ? { token, api: 'facebook' } : null;
   }
 
   /**

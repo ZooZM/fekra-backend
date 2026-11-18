@@ -2,6 +2,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { httpUrl, metaId, text } from '../../common/zod/primitives';
+import { metaAccessToken } from './access-token.schema';
 import {
   AiConfigSchema,
   CommentReplyConfigSchema,
@@ -35,7 +36,9 @@ const ClientFields = z.strictObject({
   businessCategory: text(255),
   fbPageId: metaId.nullish(),
   instaAccountId: metaId.nullish(),
-  accessToken: z.string().trim().min(1), // plaintext in, encrypted by the service before saving
+  // plaintext in, encrypted by the service before saving. At least one of the two on create.
+  accessToken: z.string().trim().min(1).optional(), // Facebook Page token
+  instaAccessToken: metaAccessToken.optional(), // Instagram Login token, for Instagram calls
   brandLogo: httpUrl.max(255).nullish(), // brand_logo is VARCHAR(255)
   aiConfig: AiConfigSchema.optional(),
   dmReplyConfig: DmReplyConfigInputSchema.optional(),
@@ -47,6 +50,14 @@ const ClientFields = z.strictObject({
 // Subscribing needs an endpoint. On an edit the service checks the merged state instead, because
 // the endpoint may already be stored.
 export const CreateClientSchema = ClientFields.superRefine((client, ctx) => {
+  // an Instagram-only client has no Page token, but every client needs one token to be answered
+  if (!client.accessToken && !client.instaAccessToken) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['accessToken'],
+      message: 'Enter a Facebook Page token or an Instagram token',
+    });
+  }
   if (client.chatSubscribed && !client.chatWorkflowEndpoint) {
     ctx.addIssue({
       code: 'custom',
@@ -58,10 +69,13 @@ export const CreateClientSchema = ClientFields.superRefine((client, ctx) => {
 });
 
 /**
- * Edits never carry the token (it has its own endpoint) and must say which version they
+ * Edits never carry a token (each has its own endpoint) and must say which version they
  * started from, so a stale save is refused instead of overwriting someone else's change.
  */
-export const UpdateClientSchema = ClientFields.omit({ accessToken: true })
+export const UpdateClientSchema = ClientFields.omit({
+  accessToken: true,
+  instaAccessToken: true,
+})
   .partial()
   .extend({ version: z.number().int().min(1) });
 

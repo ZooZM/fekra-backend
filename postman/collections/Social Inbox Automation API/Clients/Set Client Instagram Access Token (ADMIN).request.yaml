@@ -1,0 +1,30 @@
+$kind: http-request
+description: |-
+  Sets or replaces the client's Instagram token (write-only). **Requires:** `ADMIN` role.
+
+  This is an **Instagram Login** user token (Business Login for Instagram), not a Facebook Page token. Once it is set, every Instagram call for this client (comment replies, private replies, hides, the posts list, unreplied counts and reply runs) goes to `graph.instagram.com` with it. Without it, Instagram calls use the Page token from `PUT /clients/:id/access-token` on `graph.facebook.com` (Instagram API with Facebook Login). Facebook calls always use the Page token.
+
+  The token needs `instagram_business_basic` and `instagram_business_manage_comments`.
+
+  **Body:** `{ "token": string }`, 1 to 4096 characters after trimming. An empty token or an unknown field returns `422`; an unknown client `404`.
+
+  The response body is empty and the token is never returned by any endpoint. The client's `version` does **not** change. An `ACCESS_TOKEN_REPLACED` activity entry with `changedFields: ["instaAccessToken"]` is recorded without the value.
+
+  > Use a placeholder token. Never put a real Meta token in this collection.
+url: "{{baseUrl}}/clients/:id/instagram-access-token"
+method: PUT
+headers:
+  Content-Type: application/json
+pathVariables:
+  id: "{{resourceId}}"
+body:
+  type: json
+  content: |-
+    {
+      "token": "EXAMPLE-INSTAGRAM-TOKEN-REPLACE-ME"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));
+    language: text/javascript
+order: 6500

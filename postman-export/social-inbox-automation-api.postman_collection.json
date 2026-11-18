@@ -567,6 +567,7 @@
                   "pm.test('Starts at version 1 and never returns the token', () => {",
                   "  pm.expect(json.version).to.eql(1);",
                   "  pm.expect(JSON.stringify(json)).to.not.include('accessToken');",
+                  "  pm.expect(JSON.stringify(json)).to.not.include('instaAccessToken');",
                   "});",
                   "if (json.id) { pm.collectionVariables.set('clientId', json.id); pm.collectionVariables.set('resourceId', json.id); }"
                 ]
@@ -600,7 +601,7 @@
                 "clients"
               ]
             },
-            "description": "Creates a client. **Requires:** `ADMIN` role (403 otherwise).\n\n**Body:** `CreateClientDto`. `accessToken` is plaintext in and stored encrypted; it is never returned.\n\n**Responses**\n- `201` the client, `version: 1`. A `CREATED` activity entry is recorded.\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` (`fbPageId` or `instaAccountId`) when that account already belongs to another client. Nothing is created.\n- `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, missing token, private-message replies on with no message.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
+            "description": "Creates a client. **Requires:** `ADMIN` role (403 otherwise).\n\n**Body:** `CreateClientDto`. Tokens are plaintext in, stored encrypted and never returned:\n- `accessToken`: the Facebook Page token (graph.facebook.com).\n- `instaAccessToken` (optional): an Instagram Login token. When given, Instagram calls use it on graph.instagram.com; otherwise they use the Page token. Same rules as `PUT /clients/:id/instagram-access-token`.\n\nAt least one of the two is required; an Instagram-only client can send just `instaAccessToken`.\n\n**Responses**\n- `201` the client, `version: 1`. A `CREATED` activity entry is recorded.\n- `409` `DUPLICATE_KEY_ERROR` with `details.field` (`fbPageId` or `instaAccountId`) when that account already belongs to another client. Nothing is created.\n- `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, no token at all (on `fieldErrors.accessToken`), private-message replies on with no message.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
           },
           "response": []
         },
@@ -667,7 +668,16 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));"
+                  "pm.test('Status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Says which tokens are stored, never the tokens', () => {",
+                  "    pm.expect(json.hasAccessToken).to.be.a('boolean');",
+                  "    pm.expect(json.hasInstaAccessToken).to.be.a('boolean');",
+                  "    pm.expect(json).to.not.have.property('accessToken');",
+                  "    pm.expect(json).to.not.have.property('instaAccessToken');",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -691,7 +701,7 @@
                 }
               ]
             },
-            "description": "Fetches a client. Uses `{{resourceId}}` (set it to a client id, or copy from `clientId`)."
+            "description": "Fetches a client. Uses `{{resourceId}}` (set it to a client id, or copy from `clientId`).\n\nThe record never carries a token. `hasAccessToken` and `hasInstaAccessToken` say which tokens are stored: when `hasInstaAccessToken` is true, Instagram calls use the Instagram token on graph.instagram.com; otherwise they use the Page token. The list, create and edit responses carry the same two fields."
           },
           "response": []
         },
@@ -841,6 +851,59 @@
               ]
             },
             "description": "Replaces the client's access token (write-only). **Requires:** `ADMIN` role.\n\n**Body:** `{ \"token\": string }`, 1 to 4096 characters after trimming. An empty token returns `422`; an unknown client `404`.\n\nThe response body is empty and the token is never returned by any endpoint. The client's `version` does **not** change. An `ACCESS_TOKEN_REPLACED` activity entry is recorded without the value.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
+          },
+          "response": []
+        },
+        {
+          "id": "10e97437-3f79-581a-a63e-45ac860d95fd",
+          "name": "Set Client Instagram Access Token (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.expect(pm.response.code).to.eql(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"EXAMPLE-INSTAGRAM-TOKEN-REPLACE-ME\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clients/:id/instagram-access-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clients",
+                ":id",
+                "instagram-access-token"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{resourceId}}"
+                }
+              ]
+            },
+            "description": "Sets or replaces the client's Instagram token (write-only). **Requires:** `ADMIN` role.\n\nThis is an **Instagram Login** user token (Business Login for Instagram), not a Facebook Page token. Once it is set, every Instagram call for this client (comment replies, private replies, hides, the posts list, unreplied counts and reply runs) goes to `graph.instagram.com` with it. Without it, Instagram calls use the Page token from `PUT /clients/:id/access-token` on `graph.facebook.com` (Instagram API with Facebook Login). Facebook calls always use the Page token.\n\nThe token needs `instagram_business_basic` and `instagram_business_manage_comments`.\n\n**Body:** `{ \"token\": string }`, 1 to 4096 characters after trimming. An empty token or an unknown field returns `422`; an unknown client `404`.\n\nThe response body is empty and the token is never returned by any endpoint. The client's `version` does **not** change. An `ACCESS_TOKEN_REPLACED` activity entry with `changedFields: [\"instaAccessToken\"]` is recorded without the value.\n\n> Use a placeholder token. Never put a real Meta token in this collection."
           },
           "response": []
         },

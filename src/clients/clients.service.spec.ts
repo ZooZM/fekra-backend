@@ -22,6 +22,8 @@ describe('ClientsService', () => {
         'getClientDataForWorkFlow',
         'setAccessToken',
         'getAccessToken',
+        'setInstaAccessToken',
+        'getInstaAccessToken',
         'recordReplyRunActivity',
       ].map((name) => [name, jest.fn()]),
     );
@@ -55,6 +57,48 @@ describe('ClientsService', () => {
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           accessToken: expect.stringContaining('encrypted:') as string,
+          instaAccessToken: null,
+        }),
+        actor,
+      );
+    });
+
+    it('encrypts the Instagram token with its own AAD, so it cannot pass as the Page token', async () => {
+      repo.create.mockResolvedValue({ id: 'generated' });
+      await service.create(
+        {
+          name: 'Client',
+          accessToken: 'page',
+          instaAccessToken: 'ig',
+        } as never,
+        actor,
+      );
+
+      const [data] = repo.create.mock.calls[0] as [
+        { id: string; accessToken: string; instaAccessToken: string },
+      ];
+      expect(crypto.encrypt).toHaveBeenCalledWith('page', data.id);
+      expect(crypto.encrypt).toHaveBeenCalledWith(
+        'ig',
+        `${data.id}:instaAccessToken`,
+      );
+      expect(data.accessToken).toBe(`encrypted:${data.id}:page`);
+      expect(data.instaAccessToken).toBe(
+        `encrypted:${data.id}:instaAccessToken:ig`,
+      );
+    });
+
+    it('creates an Instagram-only client without a Page token', async () => {
+      repo.create.mockResolvedValue({ id: 'generated' });
+      await service.create(
+        { name: 'Client', instaAccessToken: 'ig' } as never,
+        actor,
+      );
+      expect(crypto.encrypt).toHaveBeenCalledTimes(1);
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: null,
+          instaAccessToken: expect.stringContaining('ig') as string,
         }),
         actor,
       );
@@ -194,6 +238,98 @@ describe('ClientsService', () => {
       await expect(service.getAccessToken('c1')).resolves.toBe('plain');
       repo.getAccessToken.mockResolvedValue(null);
       await expect(service.getAccessToken('c1')).resolves.toBeNull();
+    });
+  });
+
+  describe('Instagram access token', () => {
+    it('encrypts with its own AAD and passes the actor', async () => {
+      repo.setInstaAccessToken.mockResolvedValue(true);
+      await service.setInstaAccessToken('c1', 'plain', actor);
+      expect(crypto.encrypt).toHaveBeenCalledWith(
+        'plain',
+        'c1:instaAccessToken',
+      );
+      expect(repo.setInstaAccessToken).toHaveBeenCalledWith(
+        'c1',
+        'encrypted:c1:instaAccessToken:plain',
+        actor,
+      );
+      expect(repo.setAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 for an unknown client', async () => {
+      repo.setInstaAccessToken.mockResolvedValue(false);
+      await expect(
+        service.setInstaAccessToken('missing', 'plain', actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('never logs the plaintext token', async () => {
+      const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map(
+        (level) => jest.spyOn(Logger.prototype, level).mockImplementation(),
+      );
+      repo.create.mockResolvedValue({ id: 'x' });
+      repo.setInstaAccessToken.mockResolvedValue(true);
+      await service.create(
+        { name: 'C', instaAccessToken: 'super-secret-token' } as never,
+        actor,
+      );
+      await service.setInstaAccessToken('c1', 'super-secret-token', actor);
+      const logged = JSON.stringify(spies.flatMap((s) => s.mock.calls));
+      expect(logged).not.toContain('super-secret-token');
+      spies.forEach((s) => s.mockRestore());
+    });
+  });
+
+  describe('getGraphToken', () => {
+    beforeEach(() => {
+      crypto.decrypt.mockImplementation(
+        (value: string, aad: string) => `${value}|${aad}`,
+      );
+    });
+
+    it('Facebook: the Page token, for graph.facebook.com', async () => {
+      repo.getAccessToken.mockResolvedValue('page');
+      repo.getInstaAccessToken.mockResolvedValue('ig');
+      await expect(service.getGraphToken('c1', 'facebook')).resolves.toEqual({
+        token: 'page|c1',
+        api: 'facebook',
+      });
+      expect(repo.getInstaAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('Instagram: the Instagram token, for graph.instagram.com, when one is stored', async () => {
+      repo.getInstaAccessToken.mockResolvedValue('ig');
+      repo.getAccessToken.mockResolvedValue('page');
+      await expect(service.getGraphToken('c1', 'instagram')).resolves.toEqual({
+        token: 'ig|c1:instaAccessToken',
+        api: 'instagram',
+      });
+      expect(repo.getAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('Instagram: falls back to the Page token on graph.facebook.com when there is no Instagram token', async () => {
+      repo.getInstaAccessToken.mockResolvedValue(null);
+      repo.getAccessToken.mockResolvedValue('page');
+      await expect(service.getGraphToken('c1', 'instagram')).resolves.toEqual({
+        token: 'page|c1',
+        api: 'facebook',
+      });
+    });
+
+    it.each(['facebook', 'instagram'] as const)(
+      '%s: null when the client has no token for it',
+      async (platform) => {
+        repo.getInstaAccessToken.mockResolvedValue(null);
+        repo.getAccessToken.mockResolvedValue(null);
+        await expect(service.getGraphToken('c1', platform)).resolves.toBeNull();
+      },
+    );
+
+    it('Facebook: null for an Instagram-only client, never the Instagram token', async () => {
+      repo.getInstaAccessToken.mockResolvedValue('ig');
+      repo.getAccessToken.mockResolvedValue(null);
+      await expect(service.getGraphToken('c1', 'facebook')).resolves.toBeNull();
     });
   });
 

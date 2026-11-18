@@ -7,6 +7,8 @@ const PAGE = '11111111111';
 const IG = '22222222222';
 const POST = `${PAGE}_33333333333`;
 const TOKEN = 'token';
+const AUTH = { token: TOKEN, api: 'facebook' } as const; // a Page token
+const IG_AUTH = { token: 'ig-token', api: 'instagram' } as const; // an Instagram Login token
 
 describe('PostCommentsService', () => {
   let service: PostCommentsService;
@@ -66,7 +68,7 @@ describe('PostCommentsService', () => {
     });
 
     it('keeps only comments the page has not replied to, newest first', async () => {
-      const result = await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      const result = await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(result.checked).toBe(5);
       expect(result.unreplied.map((c) => c.id)).toEqual(['new', 'old']);
@@ -78,13 +80,13 @@ describe('PostCommentsService', () => {
         'facebook',
         PAGE,
         POST,
-        TOKEN,
+        AUTH,
       );
       expect(unreplied.find((c) => c.id === 'new')?.replierIds).toEqual(['u3']);
     });
 
     it('requests top-level comments with their replies through graph.facebook.com', async () => {
-      await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(graph.host).toHaveBeenCalledWith('facebook');
       expect(graph.get.mock.calls[0][1]).toBe(TOKEN);
@@ -123,13 +125,34 @@ describe('PostCommentsService', () => {
         'instagram',
         IG,
         '444444',
-        TOKEN,
+        AUTH,
       );
 
       expect(checked).toBe(4);
       expect(unreplied.map((c) => c.id)).toEqual(['ig-1']);
       const url = new URL(graph.get.mock.calls[0][0]);
       expect(url.searchParams.get('fields')).toContain('replies');
+    });
+
+    it('reads through graph.facebook.com with a Page token', async () => {
+      graph.get.mockResolvedValueOnce({ data: [] });
+      await service.listUnreplied('instagram', IG, '444444', AUTH);
+      expect(graph.host).toHaveBeenCalledWith('facebook');
+      expect(graph.host).not.toHaveBeenCalledWith('instagram');
+    });
+
+    it('reads through graph.instagram.com with the Instagram token, same path and fields', async () => {
+      graph.get.mockResolvedValueOnce({ data: [] });
+      await service.listUnreplied('instagram', IG, '444444', IG_AUTH);
+
+      expect(graph.host).toHaveBeenCalledWith('instagram');
+      expect(graph.host).not.toHaveBeenCalledWith('facebook');
+      expect(graph.get.mock.calls[0][1]).toBe('ig-token');
+      const url = new URL(graph.get.mock.calls[0][0]);
+      expect(url.pathname).toBe('/444444/comments');
+      expect(url.searchParams.get('fields')).toBe(
+        'id,text,timestamp,hidden,from{id},replies.limit(50){from{id}}',
+      );
     });
   });
 
@@ -146,7 +169,7 @@ describe('PostCommentsService', () => {
           data: [{ id: 'b', message: 'y', from: { id: 'u2' } }],
         });
 
-      const result = await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      const result = await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(graph.get).toHaveBeenCalledTimes(2);
       expect(graph.get.mock.calls[1][0]).toBe(`${HOST}/next-page`);
@@ -161,7 +184,7 @@ describe('PostCommentsService', () => {
         paging: { next: `${HOST}/more` },
       });
 
-      const result = await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      const result = await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(graph.get).toHaveBeenCalledTimes(2);
       expect(result.checked).toBe(3);
@@ -174,7 +197,7 @@ describe('PostCommentsService', () => {
         data: [1, 2].map((n) => ({ id: `c${n}`, from: { id: 'u' } })),
       });
 
-      const result = await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      const result = await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(result.checked).toBe(2);
       expect(result.truncated).toBe(false);
@@ -188,7 +211,7 @@ describe('PostCommentsService', () => {
         })),
       });
 
-      const result = await service.listUnreplied('facebook', PAGE, POST, TOKEN);
+      const result = await service.listUnreplied('facebook', PAGE, POST, AUTH);
 
       expect(result.checked).toBe(500);
       expect(result.truncated).toBe(true);
@@ -198,7 +221,7 @@ describe('PostCommentsService', () => {
   it('passes Graph errors through so callers can map them', async () => {
     graph.get.mockRejectedValueOnce(new Error('Graph 400'));
     await expect(
-      service.listUnreplied('facebook', PAGE, POST, TOKEN),
+      service.listUnreplied('facebook', PAGE, POST, AUTH),
     ).rejects.toThrow('Graph 400');
   });
 
@@ -210,7 +233,7 @@ describe('PostCommentsService', () => {
         platform,
         platform === 'facebook' ? PAGE : IG,
         'comment-1',
-        TOKEN,
+        AUTH,
       );
 
     it('reads one comment with its replies, through graph.facebook.com', async () => {
@@ -233,6 +256,17 @@ describe('PostCommentsService', () => {
       expect(url.searchParams.get('fields')).toBe(
         'id,hidden,replies.limit(50){from{id}}',
       );
+    });
+
+    it('reads through graph.instagram.com with the Instagram token', async () => {
+      graph.get.mockResolvedValueOnce({ id: 'comment-1' });
+      await expect(
+        service.recheck('instagram', IG, 'comment-1', IG_AUTH),
+      ).resolves.toBe('needs_reply');
+
+      expect(graph.host).toHaveBeenCalledWith('instagram');
+      expect(graph.get.mock.calls[0][1]).toBe('ig-token');
+      expect(new URL(graph.get.mock.calls[0][0]).pathname).toBe('/comment-1');
     });
 
     it('needs_reply when it is still visible and the page has not replied', async () => {

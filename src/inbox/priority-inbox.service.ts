@@ -391,9 +391,7 @@ export class PriorityInboxService implements OnModuleInit, OnModuleDestroy {
             item.accountId,
             item.platform,
           );
-        const latestMessages = latestChatMessagesRows
-          .map((row) => `message: ${row.message} |||| reply: ${row.reply}`)
-          .join('\n');
+        const latestMessages = latestChatMessagesRows;
 
         // clientId travels with the request: the reply is recorded and the pause is re-checked with it
         await this.delivery.send(item.id, {

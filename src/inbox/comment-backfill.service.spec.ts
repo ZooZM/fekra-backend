@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientsService } from '@app/clients/clients.service';
+import { GraphToken } from '@app/clients/types/client.types';
 import { BackfillRunStore, RunRef, StoredRun } from './backfill-run.store';
 import { CommentBackfillService } from './comment-backfill.service';
 import { GraphError } from './graph-api.service';
@@ -26,6 +27,7 @@ const PAGE = '11111111111';
 const IG = '22222222222';
 const POST = `${PAGE}_33333333333`;
 const CLIENT_ID = 'c1111111-1111-4111-8111-111111111111';
+const AUTH: GraphToken = { token: 'token', api: 'facebook' }; // a Page token
 const actor = {
   id: 'a1111111-1111-4111-8111-111111111111',
   name: 'Admin',
@@ -150,7 +152,7 @@ describe('CommentBackfillService', () => {
   let store: FakeStore;
   let clients: {
     getClientDataForWorkFlow: jest.Mock;
-    getAccessToken: jest.Mock;
+    getGraphToken: jest.Mock;
     findById: jest.Mock;
     recordReplyRun: jest.Mock;
   };
@@ -198,7 +200,7 @@ describe('CommentBackfillService', () => {
     store = new FakeStore();
     clients = {
       getClientDataForWorkFlow: jest.fn().mockResolvedValue(config()),
-      getAccessToken: jest.fn().mockResolvedValue('token'),
+      getGraphToken: jest.fn().mockResolvedValue(AUTH),
       findById: jest.fn().mockResolvedValue(config()),
       recordReplyRun: jest.fn().mockResolvedValue(undefined),
     };
@@ -209,7 +211,7 @@ describe('CommentBackfillService', () => {
         truncated: false,
       }),
       recheck: jest
-        .fn<Promise<RecheckOutcome>, [Platform, string, string, string]>()
+        .fn<Promise<RecheckOutcome>, [Platform, string, string, GraphToken]>()
         .mockResolvedValue('needs_reply'),
     };
     inbox = {
@@ -246,13 +248,13 @@ describe('CommentBackfillService', () => {
       expect((thrown as ConflictException).getResponse()).toMatchObject({
         errorCode: 'COMMENT_REPLIES_DISABLED',
       });
-      expect(clients.getAccessToken).not.toHaveBeenCalled();
+      expect(clients.getGraphToken).not.toHaveBeenCalled();
       expect(store.acquireLock).not.toHaveBeenCalled();
       expect(postComments.listUnreplied).not.toHaveBeenCalled();
     });
 
     it('400s when the client has no access token, without taking the lock', async () => {
-      clients.getAccessToken.mockResolvedValue(null);
+      clients.getGraphToken.mockResolvedValue(null);
       await expect(start()).rejects.toBeInstanceOf(BadRequestException);
       expect(store.acquireLock).not.toHaveBeenCalled();
     });
@@ -401,15 +403,42 @@ describe('CommentBackfillService', () => {
         'facebook',
         PAGE,
         POST,
-        'token',
+        AUTH,
       );
+      expect(clients.getGraphToken).toHaveBeenCalledWith(CLIENT_ID, 'facebook');
 
       await start(IG, '444444');
+      expect(clients.getGraphToken).toHaveBeenLastCalledWith(
+        CLIENT_ID,
+        'instagram',
+      );
       expect(postComments.listUnreplied).toHaveBeenLastCalledWith(
         'instagram',
         IG,
         '444444',
-        'token',
+        AUTH,
+      );
+    });
+
+    it('reads and re-checks Instagram comments with the Instagram token when the client has one', async () => {
+      const igAuth: GraphToken = { token: 'ig-token', api: 'instagram' };
+      clients.getGraphToken.mockResolvedValue(igAuth);
+      unreplied([comment('a')]);
+
+      await start(IG, '444444');
+      await flush();
+
+      expect(postComments.listUnreplied).toHaveBeenCalledWith(
+        'instagram',
+        IG,
+        '444444',
+        igAuth,
+      );
+      expect(postComments.recheck).toHaveBeenCalledWith(
+        'instagram',
+        IG,
+        'a',
+        igAuth,
       );
     });
 
@@ -588,7 +617,7 @@ describe('CommentBackfillService', () => {
         'instagram',
         IG,
         'a',
-        'token',
+        AUTH,
       );
     });
 

@@ -259,10 +259,38 @@ describe('Clients admin API (e2e)', () => {
       );
     });
 
-    it('rejects a missing access token', async () => {
+    it('rejects a client with no token at all, on the accessToken field', async () => {
       const body = valid();
       delete body.accessToken;
-      await post('/clients', body).expect(422);
+      const res = await post('/clients', body).expect(422);
+      expect(res.body).toMatchObject({
+        errorCode: 'INPUT_VALIDATION_ERROR',
+        details: { fieldErrors: { accessToken: [expect.any(String)] } },
+      });
+    });
+
+    it('creates an Instagram-only client with just an Instagram token, encrypted at rest', async () => {
+      const body = valid({
+        name: 'Insta only',
+        instaAccountId: '200000000099',
+        instaAccessToken: 'plain-ig-token-1',
+      });
+      delete body.accessToken;
+      const res = await post('/clients', body).expect(201);
+      expect(JSON.stringify(res.body)).not.toContain('plain-ig-token-1');
+      expect(JSON.stringify(res.body)).not.toContain('instaAccessToken');
+      expect(res.body).toMatchObject({
+        hasAccessToken: false,
+        hasInstaAccessToken: true,
+      });
+
+      const stored = await prisma.client.findUniqueOrThrow({
+        where: { id: (res.body as { id: string }).id },
+        select: { accessToken: true, instaAccessToken: true },
+      });
+      expect(stored.accessToken).toBeNull();
+      expect(stored.instaAccessToken).toEqual(expect.any(String));
+      expect(stored.instaAccessToken).not.toContain('plain-ig-token-1');
     });
   });
 
@@ -332,6 +360,10 @@ describe('Clients admin API (e2e)', () => {
       await patch(`/clients/${id}`, { version: 3, accessToken: 'x' }).expect(
         422,
       );
+      await patch(`/clients/${id}`, {
+        version: 3,
+        instaAccessToken: 'x',
+      }).expect(422);
     });
 
     it('refuses an account id used by another client, but allows its own', async () => {
@@ -405,6 +437,98 @@ describe('Clients admin API (e2e)', () => {
       await put('/clients/00000000-0000-4000-8000-000000000000/access-token', {
         token: SECRET,
       }).expect(404);
+    });
+  });
+
+  describe('Instagram access token', () => {
+    const IG_SECRET = 'instagram-SECRET-token-7';
+    let id: string;
+
+    const tokensOf = (cid: string) =>
+      prisma.client.findUniqueOrThrow({
+        where: { id: cid },
+        select: { accessToken: true, instaAccessToken: true, version: true },
+      });
+
+    beforeAll(async () => {
+      id = (
+        (await post('/clients', valid({ name: 'IG tokens' }))).body as {
+          id: string;
+        }
+      ).id;
+    });
+
+    it('sets the Instagram token without touching the Page token or the version, and records it without the value', async () => {
+      const before = await tokensOf(id);
+      expect(before.instaAccessToken).toBeNull();
+      expect((await get(`/clients/${id}`).expect(200)).body).toMatchObject({
+        hasAccessToken: true,
+        hasInstaAccessToken: false,
+      });
+
+      const res = await put(`/clients/${id}/instagram-access-token`, {
+        token: IG_SECRET,
+      }).expect(200);
+      expect(JSON.stringify(res.body)).not.toContain(IG_SECRET);
+
+      const after = await tokensOf(id);
+      expect(after.instaAccessToken).toEqual(expect.any(String));
+      expect(after.instaAccessToken).not.toContain(IG_SECRET); // encrypted at rest
+      expect(after.accessToken).toBe(before.accessToken);
+      expect(after.version).toBe(before.version);
+
+      const rows = (await activity(id)).filter(
+        (r) => r.action === 'ACCESS_TOKEN_REPLACED',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].changedFields).toEqual(['instaAccessToken']);
+      const dump = await prisma.$queryRawUnsafe<unknown[]>(
+        'SELECT * FROM client_activities',
+      );
+      expect(JSON.stringify(dump)).not.toContain(IG_SECRET);
+    });
+
+    it('never returns the Instagram token in list or detail responses, only that it is set', async () => {
+      const list = await get('/clients?limit=100').expect(200);
+      const detail = await get(`/clients/${id}`).expect(200);
+      for (const body of [list.body, detail.body]) {
+        expect(JSON.stringify(body)).not.toContain(IG_SECRET);
+        expect(JSON.stringify(body)).not.toContain('instaAccessToken');
+      }
+      expect(detail.body).toMatchObject({
+        hasAccessToken: true,
+        hasInstaAccessToken: true,
+      });
+      const listed = (list.body as { data: { id: string }[] }).data.find(
+        (c) => c.id === id,
+      );
+      expect(listed).toMatchObject({ hasInstaAccessToken: true });
+    });
+
+    it('reports the flags on an edit response too', async () => {
+      const { version } = await tokensOf(id);
+      const res = await patch(`/clients/${id}`, {
+        version,
+        name: 'IG tokens edited',
+      }).expect(200);
+      expect(res.body).toMatchObject({
+        hasAccessToken: true,
+        hasInstaAccessToken: true,
+      });
+    });
+
+    it('rejects an empty token, an unknown field and an unknown client', async () => {
+      await put(`/clients/${id}/instagram-access-token`, {
+        token: '  ',
+      }).expect(422);
+      await put(`/clients/${id}/instagram-access-token`, {
+        token: IG_SECRET,
+        api: 'facebook',
+      }).expect(422);
+      await put(
+        '/clients/00000000-0000-4000-8000-000000000000/instagram-access-token',
+        { token: IG_SECRET },
+      ).expect(404);
     });
   });
 

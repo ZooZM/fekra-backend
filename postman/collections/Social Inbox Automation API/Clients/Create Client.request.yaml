@@ -2,12 +2,16 @@ $kind: http-request
 description: |-
   Creates a client. **Requires:** `ADMIN` role (403 otherwise).
 
-  **Body:** `CreateClientDto`. `accessToken` is plaintext in and stored encrypted; it is never returned.
+  **Body:** `CreateClientDto`. Tokens are plaintext in, stored encrypted and never returned:
+  - `accessToken`: the Facebook Page token (graph.facebook.com).
+  - `instaAccessToken` (optional): an Instagram Login token. When given, Instagram calls use it on graph.instagram.com; otherwise they use the Page token. Same rules as `PUT /clients/:id/instagram-access-token`.
+
+  At least one of the two is required; an Instagram-only client can send just `instaAccessToken`.
 
   **Responses**
   - `201` the client, `version: 1`. A `CREATED` activity entry is recorded.
   - `409` `DUPLICATE_KEY_ERROR` with `details.field` (`fbPageId` or `instaAccountId`) when that account already belongs to another client. Nothing is created.
-  - `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, missing token, private-message replies on with no message.
+  - `422` `INPUT_VALIDATION_ERROR`: non-digit page id, logo over 255 characters, no token at all (on `fieldErrors.accessToken`), private-message replies on with no message.
 
   > Use a placeholder token. Never put a real Meta token in this collection.
 url: "{{baseUrl}}/clients"
@@ -42,6 +46,7 @@ scripts:
       pm.test('Starts at version 1 and never returns the token', () => {
         pm.expect(json.version).to.eql(1);
         pm.expect(JSON.stringify(json)).to.not.include('accessToken');
+        pm.expect(JSON.stringify(json)).to.not.include('instaAccessToken');
       });
       if (json.id) { pm.collectionVariables.set('clientId', json.id); pm.collectionVariables.set('resourceId', json.id); }
     language: text/javascript

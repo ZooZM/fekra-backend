@@ -83,4 +83,14 @@ export class ClientsController {
   ) {
     return this.clientsService.setAccessToken(id, token, actorOf(user));
   }
+
+  /** The Instagram Login token: Instagram calls use it, on graph.instagram.com, once it is set. */
+  @Put(':id/instagram-access-token')
+  setInstaAccessToken(
+    @Param() { id }: IdParamDto,
+    @Body() { token }: ReplaceAccessTokenDto,
+    @CurrentUser() user: SafeUser,
+  ) {
+    return this.clientsService.setInstaAccessToken(id, token, actorOf(user));
+  }
 }
