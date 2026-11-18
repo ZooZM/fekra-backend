@@ -516,8 +516,20 @@ describe('PriorityInboxService (chat service: subscription and pause)', () => {
           client: expect.objectContaining({
             services: [{ name: 'Cut', price: '120' }],
           }),
-          latestMessages: 'message: prior message |||| reply: prior reply',
+          // the history goes to n8n as the stored exchanges, oldest first, not as one string
+          latestMessages: [{ message: 'prior message', reply: 'prior reply' }],
         }),
+      );
+    });
+
+    it('sends an empty history for a conversation with no earlier exchanges', async () => {
+      conversations.findLastMessagesByIdForWorkflow.mockResolvedValue([]);
+
+      await handle(batch());
+
+      expect(delivery.send).toHaveBeenCalledWith(
+        'dm-1',
+        expect.objectContaining({ latestMessages: [] }),
       );
     });
 
