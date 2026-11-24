@@ -72,6 +72,26 @@ describe('MessageSenderService', () => {
     });
   });
 
+  it('continues voice replies through the normal send and persistence flow', async () => {
+    jest
+      .spyOn(service, 'handleVoiceReply')
+      .mockResolvedValue('handled voice reply');
+
+    await service.reply(request, 'voice reply', 'voice');
+
+    expect(service.handleVoiceReply).toHaveBeenCalledWith('voice reply');
+    expect(graph.post).toHaveBeenCalledWith(
+      'https://graph.test/page-1/messages',
+      expect.objectContaining({
+        message: { text: 'handled voice reply' },
+      }),
+      'token',
+    );
+    expect(conversations.createMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ reply: 'handled voice reply' }),
+    );
+  });
+
   describe('a request that was pending before clientId travelled with it', () => {
     const legacy = {
       ...request,

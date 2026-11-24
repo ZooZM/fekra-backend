@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { N8N_REPLY_TYPES } from '../inbox.types';
 
 /** An optional text from an n8n expression: an empty expression arrives as null or "". */
 const optionalText = z.string().nullish();
@@ -15,6 +16,7 @@ const optionalText = z.string().nullish();
 export const N8nCallbackSchema = z.looseObject({
   id: z.string().min(1, 'id is required'), // the requestId the platform sent
   text: optionalText, // DM batch reply
+  replyType: z.enum(N8N_REPLY_TYPES).optional(), // DM reply format; defaults to text
   type: z // comments only
     .union([z.enum(['engagement', 'question']), z.literal(''), z.null()])
     .transform((type) => type || undefined)

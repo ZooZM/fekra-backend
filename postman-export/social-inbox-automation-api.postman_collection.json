@@ -1711,7 +1711,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"pending-request-id\",\n  \"text\": \"Hi! We're open daily from 8am to 11pm.\"\n}",
+              "raw": "{\n  \"id\": \"pending-request-id\",\n  \"text\": \"Hi! We're open daily from 8am to 11pm.\",\n  \"replyType\": \"text\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1728,7 +1728,7 @@
                 "callback"
               ]
             },
-            "description": "Used when the pending request is of kind `batch` (direct messages). Only `id` and `text` are used. Empty/blank `text` sends nothing.\n\n**Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `422` `INPUT_VALIDATION_ERROR` missing id or a `type` other than `engagement`/`question` (was `400` before feature 004) | `401` bad secret (checked first)\n\nExtra keys are ignored, and `null` or `\"\"` texts mean \"not sent\"."
+            "description": "Used when the pending request is of kind `batch` (direct messages). `replyType` is optional (`text` by default, or `voice`). Voice replies pass through a TODO handler before the existing reply flow. Empty/blank `text` sends nothing.\n\n**Responses:** `200 {acknowledged:true}` | `200 {acknowledged:false}` (duplicate/expired) | `422` `INPUT_VALIDATION_ERROR` missing id or a `type` other than `engagement`/`question` (was `400` before feature 004) | `401` bad secret (checked first)\n\nExtra keys are ignored, and `null` or `\"\"` texts mean \"not sent\"."
           },
           "response": []
         },

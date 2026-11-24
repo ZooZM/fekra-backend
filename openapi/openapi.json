@@ -2377,6 +2377,13 @@
             },
             "type": "array"
           },
+          "replyType": {
+            "enum": [
+              "text",
+              "voice"
+            ],
+            "type": "string"
+          },
           "text": {
             "items": {
               "type": "string"

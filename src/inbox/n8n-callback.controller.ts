@@ -34,7 +34,8 @@ export class N8nCallbackController {
 
     if (req.kind === 'batch') {
       const text = body.text?.trim();
-      if (text && !req.recovery) void this.messageSender.reply(req, text);
+      if (text && !req.recovery)
+        void this.messageSender.reply(req, text, body.replyType ?? 'text');
     } else {
       void this.commentReply.handleN8nReply(req, {
         type: body.type ?? 'engagement',

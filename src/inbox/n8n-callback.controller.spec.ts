@@ -72,7 +72,22 @@ describe('N8nCallbackController', () => {
       await expect(
         controller.callback({ id: 'r1', text: '  hello  ' }),
       ).resolves.toEqual({ acknowledged: true });
-      expect(sender.reply).toHaveBeenCalledWith(payload, 'hello');
+      expect(sender.reply).toHaveBeenCalledWith(payload, 'hello', 'text');
+    });
+
+    it('passes the requested voice reply type to the sender', async () => {
+      const payload = { kind: 'batch', id: 'dm-voice-1' };
+      delivery.take.mockResolvedValue({ payload, attempts: 1 });
+
+      await expect(
+        controller.callback({
+          id: 'r1',
+          text: 'hello',
+          replyType: 'voice',
+        }),
+      ).resolves.toEqual({ acknowledged: true });
+
+      expect(sender.reply).toHaveBeenCalledWith(payload, 'hello', 'voice');
     });
 
     it('acknowledges recovered batches without sending a duplicate customer reply', async () => {

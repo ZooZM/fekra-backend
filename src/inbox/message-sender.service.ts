@@ -8,6 +8,7 @@ import {
 } from './graph-api.service';
 import { ConversationsService } from '@app/conversations/conversations.service';
 import { Chat } from '@app/generated/prisma/client';
+import { N8nReplyType } from './inbox.types';
 
 const DM_LIMIT = 2000; // Messenger text limit per message
 
@@ -23,7 +24,12 @@ export class MessageSenderService {
   ) {}
 
   /** Never throws, so callers can use `void sender.reply(...)`. */
-  async reply(req: SendableRequest, text: string): Promise<void> {
+  async reply(
+    req: SendableRequest,
+    text: string,
+    replyType: N8nReplyType = 'text',
+  ): Promise<void> {
+    let replyText = text;
     let messages: NonNullable<SendableRequest['messages']>;
     // The client of the request, not req.clientId: a request that was pending in Redis when this
     // release started was written without that field, and its client is always there.
@@ -39,6 +45,9 @@ export class MessageSenderService {
         throw new GraphError('message batch is missing', false);
       }
       messages = req.messages;
+      if (replyType === 'voice') {
+        replyText = await this.handleVoiceReply(text);
+      }
 
       // Checkpoint 4 (research R2): the workflow can take a while, so an administrator may have
       // paused the conversation after the message was handed over. Nothing is sent then.
@@ -49,13 +58,13 @@ export class MessageSenderService {
       }
 
       const url = `${this.graph.host(req.platform)}/${req.accountId}/messages`;
-      for (let i = 0; i < text.length; i += DM_LIMIT) {
+      for (let i = 0; i < replyText.length; i += DM_LIMIT) {
         await this.graph.post(
           url,
           {
             recipient: { id: req.senderId },
             messaging_type: 'RESPONSE',
-            message: { text: text.slice(i, i + DM_LIMIT) },
+            message: { text: replyText.slice(i, i + DM_LIMIT) },
           },
           token,
         );
@@ -67,7 +76,7 @@ export class MessageSenderService {
       await this.graph.deadLetter({
         service: 'message',
         request: req,
-        text,
+        text: replyText,
         error: (err as Error).message,
       });
       return;
@@ -83,7 +92,7 @@ export class MessageSenderService {
       await this.conversations.createMessage({
         chatId: chat.id,
         message: messages.map((message) => message.text).join('\n'),
-        reply: text,
+        reply: replyText,
       });
       this.logger.log(
         `DM sent and recorded for ${req.senderId} (${req.platform})`,
@@ -93,6 +102,11 @@ export class MessageSenderService {
         `DM sent to ${req.senderId}, but conversation ${req.id} could not be recorded: ${(err as Error).message}`,
       );
     }
+  }
+
+  handleVoiceReply(text: string): Promise<string> {
+    // TODO: Implement voice-specific handling before continuing through the normal reply flow.
+    return Promise.resolve(text);
   }
 
   /** The conversation when it is paused now. Fails open: if it cannot be read, the reply is sent. */

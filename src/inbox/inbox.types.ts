@@ -1,5 +1,7 @@
 // inbox/inbox.types.ts
 export type Platform = 'facebook' | 'instagram';
+export const N8N_REPLY_TYPES = ['text', 'voice'] as const;
+export type N8nReplyType = (typeof N8N_REPLY_TYPES)[number];
 
 export interface BufferedMessage {
   mid: string;

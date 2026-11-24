@@ -8,6 +8,19 @@ describe('N8nCallbackSchema', () => {
     });
   });
 
+  it('accepts text and voice reply types', () => {
+    expect(
+      N8nCallbackSchema.parse({
+        id: 'r1',
+        text: 'hello',
+        replyType: 'voice',
+      }).replyType,
+    ).toBe('voice');
+    expect(
+      N8nCallbackSchema.parse({ id: 'r1', replyType: 'text' }).replyType,
+    ).toBe('text');
+  });
+
   it('accepts a comment answer with every text', () => {
     const body = {
       id: 'r1',
@@ -42,6 +55,7 @@ describe('N8nCallbackSchema', () => {
     ['an empty id', { id: '' }],
     ['a numeric id', { id: 12 }],
     ['an unknown comment type', { id: 'r1', type: 'complaint' }],
+    ['an unknown reply type', { id: 'r1', replyType: 'video' }],
     ['a text that is not a string', { id: 'r1', text: { a: 1 } }],
   ])('refuses %s', (_label, body) => {
     expect(N8nCallbackSchema.safeParse(body).success).toBe(false);
