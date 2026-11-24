@@ -45,7 +45,7 @@ describe('LeadsRepository', () => {
     $queryRaw: jest.Mock;
   };
   let prisma: {
-    lead: { findFirst: jest.Mock };
+    lead: { findFirst: jest.Mock; findMany: jest.Mock };
     $executeRaw: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -64,11 +64,72 @@ describe('LeadsRepository', () => {
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'lead-1' }]),
     };
     prisma = {
-      lead: { findFirst: jest.fn() },
+      lead: { findFirst: jest.fn(), findMany: jest.fn() },
       $executeRaw: jest.fn(),
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     repo = new LeadsRepository(prisma as never);
+  });
+
+  describe('findStale', () => {
+    it('pages stale leads in stable order and selects only recovery identifiers', async () => {
+      const cutoff = new Date('2026-11-14T00:00:00.000Z');
+      const cursor = {
+        id: 'lead-0',
+        updatedAt: new Date('2026-11-01T00:00:00.000Z'),
+      };
+      const candidates = [
+        {
+          id: 'lead-1',
+          clientId: 'client-1',
+          ...key,
+          updatedAt: new Date('2026-11-02T00:00:00.000Z'),
+        },
+      ];
+      prisma.lead.findMany.mockResolvedValue(candidates);
+
+      await expect(repo.findStale(cutoff, cursor, 100)).resolves.toEqual(
+        candidates,
+      );
+      expect(prisma.lead.findMany).toHaveBeenCalledWith({
+        where: {
+          AND: [
+            { updatedAt: { lt: cutoff } },
+            {
+              OR: [
+                { phone: null },
+                { country: null },
+                { lastIntent: null },
+                { summary: null },
+                { notifiedAt: null },
+              ],
+            },
+            {
+              OR: [
+                { updatedAt: { gt: cursor.updatedAt } },
+                { updatedAt: cursor.updatedAt, id: { gt: cursor.id } },
+              ],
+            },
+          ],
+        },
+        select: {
+          id: true,
+          clientId: true,
+          platform: true,
+          accountId: true,
+          senderId: true,
+          stage: true,
+          phone: true,
+          country: true,
+          lastIntent: true,
+          summary: true,
+          notifiedAt: true,
+          updatedAt: true,
+        },
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+        take: 100,
+      });
+    });
   });
 
   describe('findByKey', () => {

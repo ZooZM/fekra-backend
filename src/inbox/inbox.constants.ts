@@ -8,6 +8,7 @@ export const COMMENT_RETRY_KEY = 'inbox:comments:retry'; // score = when the LLM
 export const PENDING_HASH = 'n8n:pending'; // field = request id, value = data
 export const REQ_TTL = 'n8n:ttl:'; // + request id
 export const DEAD_LIST = 'n8n:dead';
+export const LEAD_RECOVERY_LOCK = 'n8n:lead-recovery:lock';
 export const DM_DATA = 'dmbuf:data:'; // + platform:account:sender
 export const DM_TTL = 'dmbuf:ttl:'; // + platform:account:sender
 

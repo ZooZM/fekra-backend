@@ -19,3 +19,24 @@ export interface UpsertLeadResult {
   /** true only for the save that set notifiedAt. */
   notifiedNow: boolean;
 }
+
+/** Minimal lead identity needed to replay a stale chat through n8n. */
+export interface StaleLeadCandidate {
+  id: string;
+  clientId: string | null;
+  platform: Lead['platform'] | null;
+  accountId: string | null;
+  senderId: string | null;
+  stage: string | null;
+  phone: string | null;
+  country: string | null;
+  lastIntent: string | null;
+  summary: string | null;
+  notifiedAt: Date | null;
+  updatedAt: Date;
+}
+
+export interface StaleLeadCursor {
+  id: string;
+  updatedAt: Date;
+}

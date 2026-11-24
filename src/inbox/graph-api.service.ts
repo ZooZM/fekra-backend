@@ -16,6 +16,8 @@ export interface SendableRequest {
   clientId: string;
   client?: ClientRecord;
   messages?: BufferedMessage[];
+  /** Replayed only to refresh lead context; callback replies must not be sent to the customer. */
+  recovery?: boolean;
 }
 
 const HOSTS: Record<Platform, string> = {

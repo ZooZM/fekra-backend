@@ -32,6 +32,7 @@ describe('LeadsService', () => {
   let repo: {
     findByKey: jest.Mock;
     upsert: jest.Mock;
+    findStale: jest.Mock;
     purgeBefore: jest.Mock;
   };
   let clients: { ownsAccount: jest.Mock };
@@ -46,6 +47,7 @@ describe('LeadsService', () => {
     repo = {
       findByKey: jest.fn().mockResolvedValue(null),
       upsert: jest.fn(),
+      findStale: jest.fn(),
       purgeBefore: jest.fn(),
     };
     clients = { ownsAccount: jest.fn().mockResolvedValue(true) };
@@ -192,6 +194,18 @@ describe('LeadsService', () => {
       );
       expect(later.notifiedNow).toBe(false);
     });
+  });
+
+  it('delegates recovery scans to the repository', async () => {
+    const cutoff = new Date('2026-11-13T00:00:00.000Z');
+    const cursor = { id: 'lead-0', updatedAt: cutoff };
+    const candidates = [{ id: 'lead-1' }];
+    repo.findStale.mockResolvedValue(candidates);
+
+    await expect(
+      service.findStaleForRecovery(cutoff, cursor, 100),
+    ).resolves.toBe(candidates);
+    expect(repo.findStale).toHaveBeenCalledWith(cutoff, cursor, 100);
   });
 
   it('deletes old leads through the repository (retention)', async () => {

@@ -204,6 +204,13 @@ subscribed. Do every step below in one window.
    Each entry's `payload.client.id` names the client. The entries hold customer messages: don't
    paste them anywhere. Dead-listed DMs are not sent again; answer those customers from the page
    inbox if needed.
+
+   **Stale lead recovery** runs 1 minute after API startup and every 48 hours after that. It
+   selects leads whose `updatedAt` is more than 24 hours old and where at least one of `stage`,
+   `phone`, `country`, `lastIntent`, `summary` or `notifiedAt` is null. It replays the latest stored
+   exchange and its recent context to that client's active, subscribed chat workflow. The workflow
+   can refresh the lead through `/n8n/leads`; a recovery callback is acknowledged but its reply is
+   not sent to the customer again. Leads with no stored conversation are skipped.
 9. **Once the release is verified**, remove `N8N_WEBHOOK_URL` from `/opt/fekra/.env` and from the
    secret store. Keep the old value in the secret store's history, because a rollback needs it.
 

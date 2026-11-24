@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@app/prisma/prisma.service';
 import { ILeadsRepository } from './ILeadsRepository.repository';
 import { LeadKey, LeadWrite } from '../interfaces/lead-write.interface';
-import { LeadRecord, UpsertLeadResult } from '../types/lead.types';
+import {
+  LeadRecord,
+  StaleLeadCandidate,
+  StaleLeadCursor,
+  UpsertLeadResult,
+} from '../types/lead.types';
 import { toLeadRecord } from '../mappers/lead.mapper';
 
 @Injectable()
@@ -14,6 +19,55 @@ export class LeadsRepository implements ILeadsRepository {
       where: { ...key, clientId },
     });
     return row ? toLeadRecord(row) : null;
+  }
+
+  findStale(
+    cutoff: Date,
+    cursor: StaleLeadCursor | undefined,
+    take: number,
+  ): Promise<StaleLeadCandidate[]> {
+    return this.prisma.lead.findMany({
+      where: {
+        AND: [
+          { updatedAt: { lt: cutoff } },
+          {
+            OR: [
+              { phone: null },
+              { country: null },
+              { lastIntent: null },
+              { summary: null },
+              { notifiedAt: null },
+            ],
+          },
+          ...(cursor
+            ? [
+                {
+                  OR: [
+                    { updatedAt: { gt: cursor.updatedAt } },
+                    { updatedAt: cursor.updatedAt, id: { gt: cursor.id } },
+                  ],
+                },
+              ]
+            : []),
+        ],
+      },
+      select: {
+        id: true,
+        clientId: true,
+        platform: true,
+        accountId: true,
+        senderId: true,
+        stage: true,
+        phone: true,
+        country: true,
+        lastIntent: true,
+        summary: true,
+        notifiedAt: true,
+        updatedAt: true,
+      },
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      take,
+    });
   }
 
   upsert(

@@ -7,7 +7,12 @@ import {
   LEADS_REPOSITORY,
 } from './repositories/ILeadsRepository.repository';
 import { LeadContextQuery, UpsertLeadInput } from './schemas/lead.schema';
-import { LeadContext, UpsertLeadResult } from './types/lead.types';
+import {
+  LeadContext,
+  StaleLeadCandidate,
+  StaleLeadCursor,
+  UpsertLeadResult,
+} from './types/lead.types';
 import { LeadKey } from './interfaces/lead-write.interface';
 import { mergeLead } from './helpers/merge-lead';
 
@@ -77,6 +82,15 @@ export class LeadsService {
   /** Called by the retention run. Returns how many leads were deleted. */
   purgeBefore(cutoff: Date): Promise<number> {
     return this.repo.purgeBefore(cutoff);
+  }
+
+  /** Used by the scheduled recovery job; candidates contain only routing identifiers. */
+  findStaleForRecovery(
+    cutoff: Date,
+    cursor: StaleLeadCursor | undefined,
+    take: number,
+  ): Promise<StaleLeadCandidate[]> {
+    return this.repo.findStale(cutoff, cursor, take);
   }
 
   private async assertOwnsAccount(scope: Scope): Promise<void> {

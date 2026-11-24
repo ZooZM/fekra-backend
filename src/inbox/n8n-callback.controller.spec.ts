@@ -75,6 +75,16 @@ describe('N8nCallbackController', () => {
       expect(sender.reply).toHaveBeenCalledWith(payload, 'hello');
     });
 
+    it('acknowledges recovered batches without sending a duplicate customer reply', async () => {
+      const payload = { kind: 'batch', id: 'dm-recovery-1', recovery: true };
+      delivery.take.mockResolvedValue({ payload, attempts: 1 });
+
+      await expect(
+        controller.callback({ id: 'r1', text: '  hello  ' }),
+      ).resolves.toEqual({ acknowledged: true });
+      expect(sender.reply).not.toHaveBeenCalled();
+    });
+
     it('sends nothing when the DM reply is blank, but still acknowledges', async () => {
       delivery.take.mockResolvedValue({
         payload: { kind: 'batch' },

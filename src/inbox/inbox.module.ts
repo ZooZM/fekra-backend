@@ -19,6 +19,8 @@ import { CommentBackfillController } from './comment-backfill.controller';
 import { GraphApiModule } from './graph-api.module';
 import { CommentsModule } from '@app/comments/comments.module';
 import { ConversationsModule } from '@app/conversations/conversations.module';
+import { LeadsModule } from '@app/leads/leads.module';
+import { LeadRecoveryService } from './lead-recovery.service';
 
 @Module({
   imports: [
@@ -26,6 +28,7 @@ import { ConversationsModule } from '@app/conversations/conversations.module';
     GraphApiModule,
     CommentsModule,
     ConversationsModule,
+    LeadsModule,
   ],
   controllers: [N8nCallbackController, CommentBackfillController],
   providers: [
@@ -42,6 +45,7 @@ import { ConversationsModule } from '@app/conversations/conversations.module';
     PostCommentsService,
     BackfillRunStore,
     CommentBackfillService,
+    LeadRecoveryService,
   ],
   exports: [
     PriorityInboxService,

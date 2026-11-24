@@ -1,5 +1,10 @@
 import { LeadKey, LeadWrite } from '../interfaces/lead-write.interface';
-import { LeadRecord, UpsertLeadResult } from '../types/lead.types';
+import {
+  LeadRecord,
+  StaleLeadCandidate,
+  StaleLeadCursor,
+  UpsertLeadResult,
+} from '../types/lead.types';
 
 export const LEADS_REPOSITORY = 'LEADS_REPOSITORY';
 
@@ -19,6 +24,13 @@ export interface ILeadsRepository {
     build: (current: LeadRecord | null) => LeadWrite,
     claimNotification: boolean,
   ): Promise<UpsertLeadResult>;
+
+  /** Finds stale leads with null recovery fields, in stable keyset order. */
+  findStale(
+    cutoff: Date,
+    cursor: StaleLeadCursor | undefined,
+    take: number,
+  ): Promise<StaleLeadCandidate[]>;
 
   /** Retention: deletes leads not updated since `cutoff`, in batches. Returns how many. */
   purgeBefore(cutoff: Date, batch?: number): Promise<number>;
